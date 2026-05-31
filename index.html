@@ -181,9 +181,11 @@ tbody tr:hover td{background:#f8fafc}
     <input type="text" id="t-search" placeholder="🔍 Suchen…" oninput="renderTeam()">
     <select id="t-status" onchange="renderTeam()">
       <option value="">Alle Status</option>
-      <option>Offen</option><option>Angebot-angenommen</option>
+      <option selected>Offen</option><option>Angebot</option>
+      <option>Angebot-angenommen</option><option>Angebot-abgelehnt</option>
       <option>Arbeit-durchgeführt</option><option>Zurückgestellt</option>
-      <option>Rechnung-schreiben</option>
+      <option>Rechnung-schreiben</option><option>Rechnung-gesendet</option>
+      <option>Zahlungseingang</option>
     </select>
   </div>
   <div class="cards" id="t-cards"><div class="loading"><div class="spinner"></div>Wird geladen…</div></div>
@@ -344,20 +346,26 @@ const CARD_COLOR = {
 };
 function badge(s){ return `<span class="badge ${BADGE[s]||'b-angebot'}">${s||'–'}</span>`; }
 
-// ── Stats (nur 2026) ───────────────────────────────────────────────────────
+// ── Stats (nur 2026, alle vorhandenen Status dynamisch) ────────────────────
 function renderStats() {
   const d26 = data.filter(r => r.jahr === 2026);
   const c = {};
-  d26.forEach(r => c[r.status] = (c[r.status]||0)+1);
-  const items = [
-    {lbl:'Gesamt 2026', n:d26.length, col:'#1e40af'},
-    {lbl:'Offen', n:c['Offen']||0, col:'#2563eb'},
-    {lbl:'In Arbeit', n:(c['Angebot-angenommen']||0)+(c['Arbeit-durchgeführt']||0), col:'#0f766e'},
-    {lbl:'Rechnung', n:(c['Rechnung-schreiben']||0)+(c['Rechnung-gesendet']||0), col:'#7c3aed'},
-    {lbl:'Bezahlt', n:c['Zahlungseingang']||0, col:'#15803d'},
-  ];
-  document.getElementById('buero-stats').innerHTML = items.map(i =>
-    `<div class="stat"><div class="stat-num" style="color:${i.col}">${i.n}</div><div class="stat-lbl">${i.lbl}</div></div>`
+  d26.forEach(r => { const s = r.status||'–'; c[s] = (c[s]||0)+1; });
+  // Farbzuordnung je Status
+  const COL = {
+    'Offen':'#2563eb','Angebot':'#64748b',
+    'Angebot-angenommen':'#16a34a','Angebot-abgelehnt':'#dc2626',
+    'Arbeit-durchgeführt':'#0d9488','Rechnung-schreiben':'#ea580c',
+    'Rechnung-gesendet':'#7c3aed','Zahlungseingang':'#15803d',
+    'Zurückgestellt':'#d97706'
+  };
+  // Gesamt zuerst, dann alle Status mit Anzahl > 0 sortiert nach Häufigkeit
+  const statusItems = Object.entries(c)
+    .sort((a,b) => b[1]-a[1])
+    .map(([s,n]) => ({lbl:s, n, col:COL[s]||'#64748b'}));
+  const all = [{lbl:'Gesamt 2026', n:d26.length, col:'#1e40af'}, ...statusItems];
+  document.getElementById('buero-stats').innerHTML = all.map(i =>
+    `<div class="stat"><div class="stat-num" style="color:${i.col}">${i.n}</div><div class="stat-lbl" style="max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${i.lbl}">${i.lbl}</div></div>`
   ).join('');
 }
 
@@ -588,28 +596,10 @@ async function saveNew() {
 // ── Navigation ────────────────────────────────────────────────────────────
 function navigateTo(addr) {
   const q = encodeURIComponent(addr);
-  // Universeller Link — iOS fragt ob Apple Maps, Android öffnet Google Maps
-  window.open(`https://maps.google.com/maps?q=${q}`, '_blank');
-}
-
-// ── Helpers ────────────────────────────────────────────────────────────────
-function switchTab(t) {
-  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',(i===0)===(t==='buero')));
-  document.getElementById('buero-view').classList.toggle('active',t==='buero');
-  document.getElementById('team-view').classList.toggle('active',t==='team');
-}
-function closeModal(id){ document.getElementById(id).classList.remove('open'); cur=null; }
-function toast(msg,type=''){
-  const el=document.getElementById('toast');
-  el.textContent=msg; el.className='toast show'+(type?' '+type:'');
-  setTimeout(()=>el.className='toast',3000);
-}
-
-// Close on backdrop click
-document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open')}));
-
-// Init
-loadData();
-</script>
-</body>
-</html>
+  // Popup mit Auswahl: Apple Karten oder Google Maps
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:16px 16px 0 0;width:100%;max-width:480px;padding:20px 16px 32px">
+      <div style="font-size:15px;font-weight:700;margin-bottom:16px;text-align:center">Navigation öffnen mit…</div>
+      <div styl
