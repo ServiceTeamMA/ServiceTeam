@@ -602,4 +602,43 @@ function navigateTo(addr) {
   overlay.innerHTML = `
     <div style="background:#fff;border-radius:16px 16px 0 0;width:100%;max-width:480px;padding:20px 16px 32px">
       <div style="font-size:15px;font-weight:700;margin-bottom:16px;text-align:center">Navigation öffnen mit…</div>
-      <div styl
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button onclick="window.open('maps://maps.apple.com/?q=${q}','_blank');this.closest('[style]').remove()"
+          style="padding:14px;border-radius:10px;border:1.5px solid #e2e8f0;background:#fff;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:10px">
+          🍎 Apple Karten
+        </button>
+        <button onclick="window.open('https://maps.google.com/maps?q=${q}','_blank');this.closest('[style]').remove()"
+          style="padding:14px;border-radius:10px;border:1.5px solid #e2e8f0;background:#fff;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:10px">
+          🗺️ Google Maps
+        </button>
+        <button onclick="this.closest('[style]').remove()"
+          style="padding:12px;border-radius:10px;border:none;background:#f1f5f9;font-size:14px;cursor:pointer;color:#64748b;font-weight:600">
+          Abbrechen
+        </button>
+      </div>
+    </div>`;
+  overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function switchTab(t) {
+  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',(i===0)===(t==='buero')));
+  document.getElementById('buero-view').classList.toggle('active',t==='buero');
+  document.getElementById('team-view').classList.toggle('active',t==='team');
+}
+function closeModal(id){ document.getElementById(id).classList.remove('open'); cur=null; }
+function toast(msg,type=''){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.className='toast show'+(type?' '+type:'');
+  setTimeout(()=>el.className='toast',3000);
+}
+
+// Close on backdrop click
+document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open')}));
+
+// Init
+loadData();
+</script>
+</body>
+</html>
