@@ -169,7 +169,6 @@ tbody tr:hover td{background:#f8fafc}
       <option>Rechnung-gesendet</option><option>Zahlungseingang</option>
       <option>Zurückgestellt</option>
     </select>
-    <select id="b-jahr" onchange="renderBuero()"><option value="">Alle Jahre</option></select>
   </div>
   <div class="tbl-wrap">
     <div id="b-table"><div class="loading"><div class="spinner"></div>Wird geladen…</div></div>
@@ -325,7 +324,6 @@ async function loadData() {
     renderStats();
     renderBuero();
     renderTeam();
-    fillYearFilter();
   } catch(e) {
     toast('Fehler beim Laden: ' + e.message, 'err');
   }
@@ -346,12 +344,13 @@ const CARD_COLOR = {
 };
 function badge(s){ return `<span class="badge ${BADGE[s]||'b-angebot'}">${s||'–'}</span>`; }
 
-// ── Stats ──────────────────────────────────────────────────────────────────
+// ── Stats (nur 2026) ───────────────────────────────────────────────────────
 function renderStats() {
+  const d26 = data.filter(r => r.jahr === 2026);
   const c = {};
-  data.forEach(r => c[r.status] = (c[r.status]||0)+1);
+  d26.forEach(r => c[r.status] = (c[r.status]||0)+1);
   const items = [
-    {lbl:'Gesamt', n:data.length, col:'#1e40af'},
+    {lbl:'Gesamt 2026', n:d26.length, col:'#1e40af'},
     {lbl:'Offen', n:c['Offen']||0, col:'#2563eb'},
     {lbl:'In Arbeit', n:(c['Angebot-angenommen']||0)+(c['Arbeit-durchgeführt']||0), col:'#0f766e'},
     {lbl:'Rechnung', n:(c['Rechnung-schreiben']||0)+(c['Rechnung-gesendet']||0), col:'#7c3aed'},
@@ -362,20 +361,12 @@ function renderStats() {
   ).join('');
 }
 
-function fillYearFilter() {
-  const years = [...new Set(data.map(r=>r.jahr).filter(Boolean))].sort((a,b)=>b-a);
-  const sel = document.getElementById('b-jahr'), val = sel.value;
-  sel.innerHTML = '<option value="">Alle Jahre</option>' + years.map(y=>`<option ${y==val?'selected':''}>${y}</option>`).join('');
-}
-
 // ── Filter ─────────────────────────────────────────────────────────────────
-function filtered(searchId, statusId, jahrId='') {
+function filtered(searchId, statusId) {
   const q = (document.getElementById(searchId).value||'').toLowerCase();
   const st = document.getElementById(statusId).value;
-  const jr = jahrId ? document.getElementById(jahrId).value : '';
   return data.filter(r => {
     if (st && r.status !== st) return false;
-    if (jr && r.jahr != jr) return false;
     if (q) return [r.auftrag,r.anschrift,r.beschreibung,r.auftraggeber,r.mieter,r.melder,r.rechnung]
       .some(f => f && f.toLowerCase().includes(q));
     return true;
@@ -384,7 +375,7 @@ function filtered(searchId, statusId, jahrId='') {
 
 // ── Büro ───────────────────────────────────────────────────────────────────
 function renderBuero() {
-  const rows = filtered('b-search','b-status','b-jahr');
+  const rows = filtered('b-search','b-status');
   if (!rows.length) {
     document.getElementById('b-table').innerHTML = '<div class="loading">Keine Einträge gefunden</div>';
     return;
@@ -463,7 +454,15 @@ function renderTeam() {
   if(!rows.length){ document.getElementById('t-cards').innerHTML='<div class="loading">Keine Aufträge gefunden</div>'; return; }
   document.getElementById('t-cards').innerHTML = rows.map(r=>`
     <div class="card" onclick="openDetail(${r.id})" style="border-left-color:${CARD_COLOR[r.status]||'#94a3b8'}">
-      <div class="card-top"><span class="card-nr">${r.auftrag||'–'}</span>${badge(r.status)}</div>
+      <div class="card-top">
+        <div>
+          <div style="font-size:12px;color:var(--muted);font-weight:700;margin-bottom:2px">
+            ${r.pos ? `<span style="color:var(--primary)">#${r.pos}</span>` : ''}
+            <span style="font-weight:400;margin-left:4px">${r.auftrag||'–'}</span>
+          </div>
+        </div>
+        ${badge(r.status)}
+      </div>
       <div class="card-addr">${(r.anschrift||'').split('\n')[0]}</div>
       <div class="card-desc">${r.beschreibung||''}</div>
       <div class="card-foot">
@@ -483,14 +482,21 @@ function openDetail(id) {
   document.getElementById('d-status').value = cur.status||'Offen';
   document.getElementById('d-bericht').value = cur.mitarbeiter_bericht||'';
 
+  const addrEncoded = encodeURIComponent((cur.anschrift||'').replace(/\n/g,', '));
+  const navBtn = cur.anschrift
+    ? `<button onclick="navigateTo('${(cur.anschrift||'').replace(/\n/g,', ').replace(/'/g,"\\'")}');event.stopPropagation()"
+        style="margin-top:6px;display:inline-flex;align-items:center;gap:5px;background:var(--primary);color:#fff;border:none;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer">
+        🧭 Navigation starten</button>`
+    : '';
+
   const fields = [
-    {l:'Datum',v:cur.datum},{l:'Pos.',v:cur.pos},
-    {l:'Anschrift',v:cur.anschrift,f:1},{l:'Beschreibung',v:cur.beschreibung,f:1},
+    {l:'Datum',v:cur.datum},{l:'Pos.',v:cur.pos ? `#${cur.pos}` : null},
+    {l:'Anschrift',v:cur.anschrift,f:1,extra:navBtn},{l:'Beschreibung',v:cur.beschreibung,f:1},
     {l:'Mieter',v:cur.mieter,f:1},{l:'Auftraggeber',v:cur.auftraggeber,f:1},
     {l:'Melder',v:cur.melder,f:1},
   ].filter(f=>f.v);
   document.getElementById('d-info').innerHTML = fields.map(f=>
-    `<div class="info-item ${f.f?'full':''}"><div class="lbl">${f.l}</div><div class="val">${f.v}</div></div>`
+    `<div class="info-item ${f.f?'full':''}"><div class="lbl">${f.l}</div><div class="val">${f.v}</div>${f.extra||''}</div>`
   ).join('');
   renderPgrid();
   document.getElementById('m-detail').classList.add('open');
@@ -577,6 +583,13 @@ async function saveNew() {
   renderBuero(); renderTeam(); renderStats(); fillYearFilter();
   closeModal('m-new');
   toast('Auftrag angelegt ✓','ok');
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────
+function navigateTo(addr) {
+  const q = encodeURIComponent(addr);
+  // Universeller Link — iOS fragt ob Apple Maps, Android öffnet Google Maps
+  window.open(`https://maps.google.com/maps?q=${q}`, '_blank');
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
