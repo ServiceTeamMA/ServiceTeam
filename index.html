@@ -588,7 +588,7 @@ async function saveNew() {
   const {data:ins,error}=await sb.from('auftraege').insert([row]).select();
   if(error){toast('Fehler: '+error.message,'err');return;}
   data.unshift(ins[0]);
-  renderBuero(); renderTeam(); renderStats(); fillYearFilter();
+  renderBuero(); renderTeam(); renderStats();
   closeModal('m-new');
   toast('Auftrag angelegt ✓','ok');
 }
