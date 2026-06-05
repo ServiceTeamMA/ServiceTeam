@@ -85,6 +85,27 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 #4f46e5}
 .cards{padding:16px 20px 90px;display:grid;gap:12px}
 @media(min-width:600px){.cards{grid-template-columns:1fr 1fr}}
 @media(min-width:960px){.cards{grid-template-columns:1fr 1fr 1fr}}
+
+/* ── Handy-Ansicht ── */
+@media(max-width:768px){
+  html,body{overflow-x:hidden;width:100%}
+  /* Header bricht sauber um: Zeile 1 = Logo + Büro/Team, Zeile 2 = Kontakte/Adressen/Jahr */
+  .header{display:flex;flex-wrap:wrap;height:auto;padding:10px 12px;gap:8px 8px;align-items:center}
+  .header-logo{flex:0 0 auto;margin-right:auto}
+  .header-logo-text{font-size:21px;letter-spacing:-1px}
+  .header-logo-sub{font-size:9px;letter-spacing:2.4px}
+  .header-tabs{flex:0 0 auto;order:1;gap:6px}
+  .header-right{flex:1 1 100%;order:2;justify-content:flex-start;flex-wrap:wrap;gap:6px}
+  .icon-btn{height:32px;padding:0 10px;font-size:11.5px}
+  .year-select{padding:7px 11px;font-size:11.5px}
+  .tab{padding:7px 14px}
+  /* Seitenränder schmaler → volle Breite nutzen */
+  .stats{padding:14px 12px 6px;gap:10px}
+  .filters{padding:10px 12px}
+  .filters input{min-width:140px}
+  .tbl-wrap{padding:12px 12px 80px}
+  .cards{padding:12px 12px 90px}
+}
 .card{background:#fff;border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);cursor:pointer;transition:transform .15s,box-shadow .15s;border:1px solid var(--border);border-left:4px solid var(--primary)}
 .card:active{transform:scale(.98)}
 .card:hover{box-shadow:var(--shadow-lg);transform:translateY(-2px)}
