@@ -4,86 +4,102 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Service Team MA – Auftragsübersicht</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
 :root {
-  --primary:#1e40af; --primary-l:#3b82f6; --primary-xl:#eff6ff;
-  --bg:#f1f5f9; --card:#fff; --border:#e2e8f0;
-  --text:#1e293b; --muted:#64748b;
-  --green:#15803d; --green-l:#dcfce7;
+  --primary:#4f46e5; --primary-l:#818cf8; --primary-xl:#eef2ff;
+  --bg:#f4f6fb; --card:#fff; --border:#e9ecf4;
+  --text:#111827; --muted:#6b7280;
+  --green:#065f46; --green-l:#f0fdf4;
   --red:#b91c1c; --red-l:#fee2e2;
-  --radius:12px; --shadow:0 1px 4px rgba(0,0,0,.08);
-  --shadow-lg:0 8px 24px rgba(0,0,0,.12);
+  --radius:14px; --shadow:0 1px 3px rgba(0,0,0,.04),0 4px 16px rgba(0,0,0,.04);
+  --shadow-lg:0 6px 24px rgba(0,0,0,.10);
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
 
 /* ── Header ── */
-.header{background:var(--primary);color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.2)}
-.header-logo{display:flex;align-items:center;gap:10px;font-size:17px;font-weight:700}
-.header-logo svg{width:28px;height:28px;flex-shrink:0}
-.header-right{display:flex;gap:8px}
-.icon-btn{background:rgba(255,255,255,.15);border:none;color:#fff;width:36px;height:36px;border-radius:8px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
-.icon-btn:hover{background:rgba(255,255,255,.25)}
+.header{background:#fff;padding:0 24px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;height:68px;position:sticky;top:0;z-index:100;border-bottom:1px solid var(--border);box-shadow:0 1px 0 rgba(0,0,0,.04),0 2px 8px rgba(0,0,0,.04)}
+.header-logo{display:flex;flex-direction:column;gap:0px}
+.header-logo-text{font-size:26px;font-weight:900;letter-spacing:-1.5px;color:#0f172a;text-transform:uppercase;line-height:1}
+.header-logo-sub{font-size:11px;color:#94a3b8;font-weight:500;letter-spacing:3.4px;margin-top:3px}
+.header-tabs{display:flex;gap:8px;justify-content:center;align-items:center}
+.header-right{display:flex;gap:8px;align-items:center;justify-content:flex-end}
+.year-select{background:linear-gradient(135deg,#4f46e5,#7c3aed);border:none;color:#fff;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;outline:none;box-shadow:0 2px 8px rgba(79,70,229,.35);font-family:'Inter',sans-serif}
+.year-select option{color:#1e293b;background:#fff}
+.icon-btn{background:#fff;border:1.5px solid var(--border);color:#374151;height:34px;padding:0 13px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;display:flex;align-items:center;gap:5px;transition:border-color .15s}
+.icon-btn:hover{border-color:#c7d2fe;color:#4f46e5}
 
 /* ── Tabs ── */
-.tabs{display:flex;background:#fff;border-bottom:2px solid var(--border)}
-.tab{flex:1;padding:13px;font-weight:600;font-size:14px;cursor:pointer;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-2px;text-align:center;transition:all .2s}
-.tab.active{color:var(--primary);border-bottom-color:var(--primary)}
+.tabs{display:none}
+.tab{padding:7px 18px;font-weight:600;font-size:13px;cursor:pointer;color:#64748b;border-radius:8px;border:1.5px solid var(--border);background:#fff;transition:all .15s;letter-spacing:-.1px}
+.tab:hover{border-color:#c7d2fe;color:#4f46e5}
+.tab.active{background:#4f46e5;color:#fff;border-color:#4f46e5;box-shadow:0 2px 8px rgba(79,70,229,.3)}
 
 /* ── Views ── */
 .view{display:none}.view.active{display:block}
 
 /* ── Stats ── */
-.stats{display:flex;gap:10px;padding:14px 16px;overflow-x:auto;-webkit-overflow-scrolling:touch}
-.stat{background:var(--card);border-radius:var(--radius);padding:12px 14px;min-width:90px;text-align:center;box-shadow:var(--shadow);flex-shrink:0}
-.stat-num{font-size:22px;font-weight:700}.stat-lbl{font-size:11px;color:var(--muted);margin-top:2px}
+.stats{display:flex;gap:12px;padding:18px 20px 8px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.stat{background:var(--card);border-radius:var(--radius);padding:16px 18px;min-width:120px;text-align:left;box-shadow:var(--shadow);flex-shrink:0;cursor:pointer;transition:transform .15s,box-shadow .15s;border:1px solid var(--border);position:relative;overflow:hidden}
+.stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:var(--radius) var(--radius) 0 0;background:currentColor;opacity:.6}
+.stat:hover{transform:translateY(-3px);box-shadow:var(--shadow-lg)}
+.stat-num{font-size:26px;font-weight:900;letter-spacing:-1px;line-height:1}
+.stat-lbl{font-size:10px;font-weight:600;color:var(--muted);margin-top:5px;text-transform:uppercase;letter-spacing:.5px}
 
 /* ── Filters ── */
-.filters{padding:10px 16px;display:flex;gap:8px;flex-wrap:wrap;background:#fff;border-bottom:1px solid var(--border)}
-.filters input,.filters select{border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;outline:none;background:#fff;transition:border-color .2s}
-.filters input:focus,.filters select:focus{border-color:var(--primary-l)}
-.filters input{flex:1;min-width:160px}
+.filters{padding:10px 20px 12px;display:flex;gap:8px;flex-wrap:wrap;background:#fff;border-bottom:1px solid var(--border)}
+.filters input,.filters select{border:1.5px solid var(--border);border-radius:9px;padding:9px 13px;font-size:13px;font-weight:500;outline:none;background:#f8fafc;transition:border-color .2s,box-shadow .2s;font-family:'Inter',sans-serif;color:var(--text)}
+.filters input:focus,.filters select:focus{border-color:#a5b4fc;box-shadow:0 0 0 3px rgba(79,70,229,.08);background:#fff}
+.filters input{flex:1;min-width:200px}
+.filters input::placeholder{color:#94a3b8;font-weight:400}
 
 /* ── Table (Büro) ── */
-.tbl-wrap{overflow-x:auto;padding:0 16px 80px}
-table{width:100%;border-collapse:collapse;background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;margin-top:14px;font-size:13px}
-th{background:#f8fafc;padding:9px 11px;text-align:left;font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;border-bottom:2px solid var(--border);white-space:nowrap}
-td{padding:9px 11px;border-bottom:1px solid var(--border);vertical-align:top}
+.tbl-wrap{overflow-x:auto;padding:16px 20px 80px}
+table{width:100%;border-collapse:separate;border-spacing:0;background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;margin-top:0;font-size:13px;border:1px solid var(--border)}
+th{background:#f8fafc;padding:11px 14px;text-align:left;font-size:10.5px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:.6px;border-bottom:1px solid var(--border);white-space:nowrap}
+th:first-child{padding-left:18px}
+td{padding:12px 14px;border-bottom:1px solid #f3f4f6;vertical-align:middle;color:#374151}
+td:first-child{padding-left:18px}
 tr:last-child td{border-bottom:none}
-tbody tr{cursor:pointer;transition:background .15s}
-tbody tr:hover td{background:#f8fafc}
+tbody tr{cursor:pointer;transition:background .1s}
+tbody tr:hover td{background:#fafbff}
+tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 #4f46e5}
 
 /* ── Status badge ── */
-.badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap}
-.b-offen{background:#dbeafe;color:#1d4ed8}
-.b-angebot{background:#f1f5f9;color:#475569}
-.b-angenommen{background:#dcfce7;color:#15803d}
-.b-abgelehnt{background:#fee2e2;color:#b91c1c}
-.b-durchgeführt{background:#ccfbf1;color:#0f766e}
-.b-rech-schreiben{background:#ffedd5;color:#c2410c}
-.b-rech-gesendet{background:#ede9fe;color:#6d28d9}
-.b-zahlung{background:#d1fae5;color:#065f46}
-.b-zurück{background:#fef9c3;color:#854d0e}
+.badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap;letter-spacing:.1px}
+.badge::before{content:'';width:5px;height:5px;border-radius:50%;flex-shrink:0;background:currentColor;opacity:.8}
+.b-offen{background:#eff6ff;color:#1d4ed8}
+.b-angebot{background:#f0f9ff;color:#0369a1}
+.b-angenommen{background:#f0fdf4;color:#166534}
+.b-abgelehnt{background:#fef2f2;color:#991b1b}
+.b-durchgeführt{background:#f0fdf4;color:#166534}
+.b-leistungsnachweis{background:#fffbeb;color:#92400e}
+.b-rech-gesendet{background:#faf5ff;color:#6d28d9}
+.b-zahlung{background:#fffbeb;color:#92400e}
+.b-zurück{background:#fefce8;color:#854d0e}
 
 /* ── Cards (Team) ── */
-.cards{padding:14px 16px 90px;display:grid;gap:12px}
+.cards{padding:16px 20px 90px;display:grid;gap:12px}
 @media(min-width:600px){.cards{grid-template-columns:1fr 1fr}}
 @media(min-width:960px){.cards{grid-template-columns:1fr 1fr 1fr}}
-.card{background:#fff;border-radius:var(--radius);padding:15px;box-shadow:var(--shadow);cursor:pointer;transition:transform .15s,box-shadow .15s;border-left:4px solid var(--primary-l)}
+.card{background:#fff;border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);cursor:pointer;transition:transform .15s,box-shadow .15s;border:1px solid var(--border);border-left:4px solid var(--primary)}
 .card:active{transform:scale(.98)}
-.card:hover{box-shadow:var(--shadow-lg)}
+.card:hover{box-shadow:var(--shadow-lg);transform:translateY(-2px)}
 .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:7px}
 .card-nr{font-weight:700;font-size:14px;color:var(--primary)}
-.card-addr{font-size:13px;font-weight:600;margin-bottom:5px}
+.card-addr{font-size:13px;font-weight:600;margin-bottom:5px;color:#0f172a}
 .card-desc{font-size:12px;color:var(--muted);margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .card-foot{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
 
 /* ── FAB ── */
-.fab{position:fixed;bottom:24px;right:20px;width:56px;height:56px;border-radius:50%;background:var(--primary);color:#fff;font-size:28px;border:none;cursor:pointer;box-shadow:0 4px 14px rgba(30,64,175,.45);display:flex;align-items:center;justify-content:center;z-index:50;transition:transform .15s}
+.fab{position:fixed;bottom:24px;right:20px;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;font-size:28px;border:none;cursor:pointer;box-shadow:0 4px 14px rgba(79,70,229,.45);display:flex;align-items:center;justify-content:center;z-index:50;transition:transform .15s}
 .fab:hover{transform:scale(1.07)}
 
 /* ── Modal ── */
-.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;align-items:flex-end;justify-content:center}
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:flex-end;justify-content:center}
 @media(min-width:640px){.overlay{align-items:center}}
 .overlay.open{display:flex}
 .modal{background:#fff;border-radius:16px 16px 0 0;width:100%;max-height:92vh;overflow-y:auto;padding:20px 18px}
@@ -94,16 +110,16 @@ tbody tr:hover td{background:#f8fafc}
 
 /* ── Info grid ── */
 .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
-.info-item{background:#f8fafc;border-radius:8px;padding:10px 12px}
+.info-item{background:#f8fafc;border-radius:10px;padding:10px 12px;border:1px solid var(--border)}
 .info-item .lbl{font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;letter-spacing:.4px}
-.info-item .val{font-size:13px;white-space:pre-line;line-height:1.4}
+.info-item .val{font-size:13px;white-space:pre-line;line-height:1.4;color:#0f172a;font-weight:500}
 .info-item.full{grid-column:span 2}
 
 /* ── Form ── */
 .fg{margin-bottom:14px}
 .fg label{display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
-.fg select,.fg textarea,.fg input{width:100%;border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;font-size:14px;font-family:inherit;outline:none;transition:border-color .2s;background:#fff}
-.fg select:focus,.fg textarea:focus,.fg input:focus{border-color:var(--primary-l)}
+.fg select,.fg textarea,.fg input{width:100%;border:1.5px solid var(--border);border-radius:9px;padding:10px 12px;font-size:14px;font-family:'Inter',inherit;outline:none;transition:border-color .2s,box-shadow .2s;background:#f8fafc;color:var(--text)}
+.fg select:focus,.fg textarea:focus,.fg input:focus{border-color:#a5b4fc;box-shadow:0 0 0 3px rgba(79,70,229,.08);background:#fff}
 .fg textarea{resize:vertical;min-height:80px}
 
 /* ── Photo zone ── */
@@ -117,10 +133,10 @@ tbody tr:hover td{background:#f8fafc}
 .premove{position:absolute;top:-6px;right:-6px;width:20px;height:20px;background:#dc2626;color:#fff;border:none;border-radius:50%;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;line-height:1}
 
 /* ── Buttons ── */
-.btn{padding:11px 20px;border-radius:8px;font-weight:600;font-size:14px;cursor:pointer;border:none;transition:opacity .2s,transform .1s;font-family:inherit}
+.btn{padding:11px 20px;border-radius:9px;font-weight:600;font-size:14px;cursor:pointer;border:none;transition:opacity .2s,transform .1s;font-family:'Inter',inherit}
 .btn:active{transform:scale(.97)}
-.btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{opacity:.88}
-.btn-secondary{background:var(--border);color:var(--text)}
+.btn-primary{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;box-shadow:0 2px 8px rgba(79,70,229,.3)}.btn-primary:hover{opacity:.9}
+.btn-secondary{background:#f1f5f9;color:#374151;border:1.5px solid var(--border)}.btn-secondary:hover{border-color:#c7d2fe}
 .btn-row{display:flex;gap:10px;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)}
 
 /* ── Loading / Empty ── */
@@ -131,10 +147,29 @@ tbody tr:hover td{background:#f8fafc}
 /* ── Toast ── */
 .toast{position:fixed;bottom:88px;left:50%;transform:translateX(-50%) translateY(10px);background:#1e293b;color:#fff;padding:11px 20px;border-radius:10px;font-size:14px;z-index:1000;opacity:0;transition:all .3s;pointer-events:none;white-space:nowrap}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-.toast.ok{background:var(--green)}.toast.err{background:var(--red)}
+.toast.ok{background:#065f46}.toast.err{background:#991b1b}
 
 /* ── Section divider ── */
 .section-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:18px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+
+/* ── Leistungsnachweis ── */
+.ln-row{display:flex;gap:8px;margin-bottom:8px;align-items:center}
+.ln-row input{flex:1;border:1.5px solid var(--border);border-radius:9px;padding:9px 11px;font-size:14px;font-family:inherit;outline:none;background:#f8fafc}
+.ln-row input:focus{border-color:#a5b4fc;background:#fff}
+.ln-row-del{background:var(--red-l);border:none;color:var(--red);width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:18px;flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1}
+.ln-mat-row{background:#f8fafc;border-radius:10px;padding:10px;margin-bottom:8px;border:1px solid var(--border)}
+.ln-mat-row input,.ln-mat-row select{border:1.5px solid var(--border);border-radius:6px;padding:7px 9px;font-size:13px;font-family:inherit;outline:none;width:100%;background:#fff}
+.ln-preview{background:var(--primary-xl);border-radius:10px;padding:12px 14px;margin:14px 0;border:1px solid #c7d2fe}
+.ln-preview-row{display:flex;justify-content:space-between;font-size:13px;padding:3px 0}
+.ln-preview-total{font-weight:700;font-size:14px;border-top:2px solid var(--primary-l);padding-top:8px;margin-top:4px}
+.sig-wrap{border:1.5px solid var(--border);border-radius:10px;background:#fafafa;touch-action:none;overflow:hidden}
+.sig-wrap canvas{display:block;width:100%;cursor:crosshair;border-radius:10px}
+.sig-foot{font-size:10px;color:var(--muted);text-align:center;padding:4px;border-top:1px solid var(--border)}
+
+/* ── Footer ── */
+.app-footer{background:#fff;border-top:1px solid var(--border);padding:11px 20px;display:flex;align-items:center;justify-content:space-between}
+.app-footer-brand{font-size:11px;font-weight:700;color:var(--primary);letter-spacing:-.2px}
+.app-footer-info{font-size:11px;color:#94a3b8;font-weight:500}
 </style>
 </head>
 <body>
@@ -142,18 +177,27 @@ tbody tr:hover td{background:#f8fafc}
 <!-- Header -->
 <div class="header">
   <div class="header-logo">
-    <svg viewBox="0 0 28 28" fill="none"><circle cx="14" cy="14" r="14" fill="rgba(255,255,255,0.15)"/><path d="M14 6l2 5h5l-4 3 2 5-5-3-5 3 2-5-4-3h5z" fill="#fff"/></svg>
-    Service Team MA
+    <div class="header-logo-text">Service Team</div>
+    <div class="header-logo-sub">Elektromeisterbetrieb</div>
+  </div>
+  <div class="header-tabs">
+    <div class="tab active" onclick="switchTab('buero')">Büro</div>
+    <div class="tab" onclick="switchTab('team')">Team</div>
   </div>
   <div class="header-right">
-    <button class="icon-btn" onclick="loadData()" title="Aktualisieren">↻</button>
+    <button class="icon-btn" onclick="openKontakte()">📋 Kontakte</button>
+    <button class="icon-btn" onclick="openRechnungsadressen()">🏢 Adressen</button>
+    <select class="year-select" id="yearSelect" onchange="onYearChange()">
+      <option value="2026">Aufträge 2026</option>
+      <option value="2027">Aufträge 2027</option>
+    </select>
   </div>
 </div>
 
-<!-- Tabs -->
+<!-- Tabs (hidden – now in header) -->
 <div class="tabs">
-  <div class="tab active" onclick="switchTab('buero')">📋 Büro</div>
-  <div class="tab" onclick="switchTab('team')">👷 Team</div>
+  <div class="tab" onclick="switchTab('buero')">Büro</div>
+  <div class="tab" onclick="switchTab('team')">Team</div>
 </div>
 
 <!-- ══ BÜRO VIEW ══ -->
@@ -164,9 +208,9 @@ tbody tr:hover td{background:#f8fafc}
     <select id="b-status" onchange="renderBuero()">
       <option value="">Alle Status</option>
       <option>Offen</option><option>Angebot</option>
-      <option>Angebot-angenommen</option><option>Angebot-abgelehnt</option>
-      <option>Arbeit-durchgeführt</option><option>Rechnung-schreiben</option>
-      <option>Rechnung-gesendet</option><option>Zahlungseingang</option>
+      <option>Angebot angenommen</option><option>Angebot abgelehnt</option>
+      <option>Arbeit durchgeführt</option><option>Leistungsnachweis</option>
+      <option>Rechnung gesendet</option><option>Zahlungseingang</option>
       <option>Zurückgestellt</option>
     </select>
   </div>
@@ -182,9 +226,9 @@ tbody tr:hover td{background:#f8fafc}
     <select id="t-status" onchange="renderTeam()">
       <option value="">Alle Status</option>
       <option selected>Offen</option><option>Angebot</option>
-      <option>Angebot-angenommen</option><option>Angebot-abgelehnt</option>
-      <option>Arbeit-durchgeführt</option><option>Zurückgestellt</option>
-      <option>Rechnung-schreiben</option><option>Rechnung-gesendet</option>
+      <option>Angebot angenommen</option><option>Angebot abgelehnt</option>
+      <option>Arbeit durchgeführt</option><option>Zurückgestellt</option>
+      <option>Leistungsnachweis</option><option>Rechnung gesendet</option>
       <option>Zahlungseingang</option>
     </select>
   </div>
@@ -207,15 +251,37 @@ tbody tr:hover td{background:#f8fafc}
       <label>Status ändern</label>
       <select id="d-status">
         <option>Offen</option><option>Angebot</option>
-        <option>Angebot-angenommen</option><option>Angebot-abgelehnt</option>
-        <option>Arbeit-durchgeführt</option><option>Rechnung-schreiben</option>
-        <option>Rechnung-gesendet</option><option>Zahlungseingang</option>
+        <option>Angebot angenommen</option><option>Angebot abgelehnt</option>
+        <option>Arbeit durchgeführt</option><option>Leistungsnachweis</option>
+        <option>Rechnung gesendet</option><option>Zahlungseingang</option>
         <option>Zurückgestellt</option>
       </select>
     </div>
     <div class="fg">
-      <label>Mitarbeiter-Bericht</label>
-      <textarea id="d-bericht" placeholder="Beschreibe die durchgeführten Arbeiten…"></textarea>
+      <label>Leistungsdatum</label>
+      <input type="date" id="d-leistungsdatum">
+    </div>
+    <div class="fg">
+      <label>Anzahl Handwerker</label>
+      <input type="number" id="d-anzahl" min="1" max="8" value="1">
+    </div>
+    <div class="fg">
+      <label>Arbeitszeit Handwerker</label>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <select id="d-von" onchange="calcTeamStunden()" style="flex:1;min-width:90px;border:1.5px solid var(--border);border-radius:8px;padding:10px 8px;font-size:14px;background:#fff;outline:none;font-family:inherit"></select>
+        <span style="color:var(--muted);font-weight:600">–</span>
+        <select id="d-bis" onchange="calcTeamStunden()" style="flex:1;min-width:90px;border:1.5px solid var(--border);border-radius:8px;padding:10px 8px;font-size:14px;background:#fff;outline:none;font-family:inherit"></select>
+      </div>
+      <div id="d-stunden-info" style="margin-top:6px;font-size:13px;font-weight:700;color:var(--primary);min-height:18px"></div>
+    </div>
+    <div class="fg">
+      <label>Tätigkeit</label>
+      <textarea id="d-taetigkeit" placeholder="Beschreibe die durchgeführten Tätigkeiten…"></textarea>
+    </div>
+    <div class="fg">
+      <label>Material</label>
+      <div id="d-material-list"></div>
+      <button class="btn btn-secondary" style="width:100%;margin-top:6px;font-size:13px" onclick="addTeamMaterial()">+ Material hinzufügen</button>
     </div>
     <div class="fg">
       <label>Fotos</label>
@@ -229,6 +295,16 @@ tbody tr:hover td{background:#f8fafc}
       </div>
       <input type="file" id="p-input" accept="image/*" multiple style="display:none" onchange="addPhotos(this.files)">
       <div class="pgrid" id="pgrid"></div>
+    </div>
+    <div class="section-label">Unterschrift Hauswart / Hausmeister</div>
+    <div class="fg">
+      <div class="sig-wrap"><canvas id="d-sig-hw" width="500" height="120"></canvas><div class="sig-foot">Unterschrift Hauswart / Hausmeister</div></div>
+      <button onclick="clearSig('d-sig-hw')" class="btn btn-secondary" style="margin-top:6px;padding:6px 14px;font-size:12px">Löschen</button>
+    </div>
+    <div class="section-label">Unterschrift Mieter</div>
+    <div class="fg">
+      <div class="sig-wrap"><canvas id="d-sig-mieter" width="500" height="120"></canvas><div class="sig-foot">Unterschrift Mieter</div></div>
+      <button onclick="clearSig('d-sig-mieter')" class="btn btn-secondary" style="margin-top:6px;padding:6px 14px;font-size:12px">Löschen</button>
     </div>
     <div class="btn-row">
       <button class="btn btn-secondary" onclick="closeModal('m-detail')">Abbrechen</button>
@@ -250,13 +326,14 @@ tbody tr:hover td{background:#f8fafc}
     <div class="info-grid" id="bd-info"></div>
     <div id="bd-fotos"></div>
     <div id="bd-bericht-section"></div>
+    <div id="bd-ln-section"></div>
     <div class="fg" style="margin-top:16px">
       <label>Status ändern</label>
       <select id="bd-status">
         <option>Offen</option><option>Angebot</option>
-        <option>Angebot-angenommen</option><option>Angebot-abgelehnt</option>
-        <option>Arbeit-durchgeführt</option><option>Rechnung-schreiben</option>
-        <option>Rechnung-gesendet</option><option>Zahlungseingang</option>
+        <option>Angebot angenommen</option><option>Angebot abgelehnt</option>
+        <option>Arbeit durchgeführt</option><option>Leistungsnachweis</option>
+        <option>Rechnung gesendet</option><option>Zahlungseingang</option>
         <option>Zurückgestellt</option>
       </select>
     </div>
@@ -267,6 +344,12 @@ tbody tr:hover td{background:#f8fafc}
     <div class="fg">
       <label>Summe (€)</label>
       <input type="number" id="bd-summe" placeholder="0.00" step="0.01">
+    </div>
+    <div id="bd-auto-info" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 12px;margin-bottom:10px"></div>
+    <button class="btn btn-primary" style="width:100%;margin-bottom:8px;background:#0d9488;font-size:13px" onclick="sendMailEntwurf()">📧 E-Mail-Entwurf erstellen</button>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <button class="btn btn-secondary" style="font-size:12px" onclick="saveToOneDrive('word')">☁️ Word → OneDrive</button>
+      <button class="btn btn-secondary" style="font-size:12px" onclick="saveToOneDrive('pdf')">☁️ PDF → OneDrive</button>
     </div>
     <div class="btn-row">
       <button class="btn btn-secondary" onclick="closeModal('m-buero-detail')">Schließen</button>
@@ -292,7 +375,7 @@ tbody tr:hover td{background:#f8fafc}
     <div class="fg">
       <label>Status</label>
       <select id="n-status">
-        <option>Offen</option><option>Angebot</option><option>Angebot-angenommen</option>
+        <option>Offen</option><option>Angebot</option><option>Angebot angenommen</option>
       </select>
     </div>
     <div class="btn-row">
@@ -302,343 +385,156 @@ tbody tr:hover td{background:#f8fafc}
   </div>
 </div>
 
+<!-- ══ LEISTUNGSNACHWEIS MODAL ══ -->
+<div class="overlay" id="m-leistung">
+  <div class="modal">
+    <div class="modal-hd">
+      <div><div class="modal-title" id="ln-title">📋 Leistungsnachweis</div></div>
+      <button class="modal-close" onclick="closeLNModal()">✕</button>
+    </div>
+
+    <!-- Auftrag-Info (read-only) -->
+    <div class="info-grid" id="ln-order-info" style="margin-bottom:10px"></div>
+
+    <!-- GWH: Fallnummer -->
+    <div id="ln-gwh-section" style="display:none">
+      <div class="fg"><label>Fallnummer (GWH)</label><input type="text" id="ln-fallnummer" placeholder="z.B. 000021330605"></div>
+    </div>
+
+    <div class="section-label">Einsatz</div>
+    <div class="fg"><label>Leistungsdatum</label><input type="date" id="ln-datum"></div>
+    <div class="fg">
+      <label>Anzahl Personen</label>
+      <input type="number" id="ln-anzahl" min="1" max="8" value="2" oninput="renderMARows()">
+    </div>
+    <div id="ln-ma-rows"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="fg"><label>Ankunft</label><input type="time" id="ln-ankunft" oninput="calcStunden()"></div>
+      <div class="fg"><label>Abfahrt</label><input type="time" id="ln-abfahrt" oninput="calcStunden()"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="fg"><label>Stunden (automatisch)</label><input type="text" id="ln-stunden" readonly style="background:#f8fafc;font-weight:700"></div>
+      <div class="fg"><label>Stundensatz (€/h)</label><input type="number" id="ln-stundensatz" step="0.01" oninput="updateVorschau()"></div>
+    </div>
+
+    <div class="section-label">Erbrachte Leistungen</div>
+    <div id="ln-leistungen-list"></div>
+    <button class="btn btn-secondary" style="width:100%;margin-bottom:14px" onclick="addLeistungRow()">+ Leistung hinzufügen</button>
+
+    <div class="section-label">Notwendige Nacharbeiten</div>
+    <div id="ln-nacharbeiten-list"></div>
+    <button class="btn btn-secondary" style="width:100%;margin-bottom:14px" onclick="addNacharbeitRow()">+ Nacharbeit hinzufügen</button>
+
+    <div class="section-label">Materialien</div>
+    <div id="ln-material-list"></div>
+    <button class="btn btn-secondary" style="width:100%;margin-bottom:14px" onclick="addMaterialRow()">+ Material hinzufügen</button>
+
+    <div class="section-label">Fahrtkosten</div>
+    <div id="ln-fahrt-section"></div>
+
+    <!-- Kostenvorschau -->
+    <div class="ln-preview">
+      <div style="font-size:11px;font-weight:700;color:var(--primary);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Kostenvorschau (netto)</div>
+      <div class="ln-preview-row"><span>Personalkosten</span><span id="lnp-personal">–</span></div>
+      <div class="ln-preview-row"><span>Fahrtkosten</span><span id="lnp-fahrt">–</span></div>
+      <div class="ln-preview-row"><span>Material</span><span id="lnp-material">–</span></div>
+      <div class="ln-preview-row ln-preview-total"><span>Netto</span><span id="lnp-netto">–</span></div>
+      <div class="ln-preview-row" style="color:var(--muted)"><span>zzgl. 19% MwSt.</span><span id="lnp-mwst">–</span></div>
+      <div class="ln-preview-row ln-preview-total" style="color:var(--primary)"><span>Brutto</span><span id="lnp-brutto">–</span></div>
+    </div>
+
+    <div class="section-label">Unterschrift Handwerker</div>
+    <div class="fg">
+      <div class="sig-wrap"><canvas id="ln-sig-hw" width="500" height="120"></canvas><div class="sig-foot">Unterschrift Handwerker</div></div>
+      <button onclick="clearSig('ln-sig-hw')" class="btn btn-secondary" style="margin-top:6px;padding:6px 14px;font-size:12px">Löschen</button>
+    </div>
+
+    <div id="ln-gwh-sigs" style="display:none">
+      <div class="section-label">Unterschrift Hauswart</div>
+      <div class="fg">
+        <div class="sig-wrap"><canvas id="ln-sig-hw2" width="500" height="120"></canvas><div class="sig-foot">Unterschrift Hauswart</div></div>
+        <button onclick="clearSig('ln-sig-hw2')" class="btn btn-secondary" style="margin-top:6px;padding:6px 14px;font-size:12px">Löschen</button>
+      </div>
+      <div class="section-label">Unterschrift Mieter</div>
+      <div class="fg">
+        <div class="sig-wrap"><canvas id="ln-sig-mieter" width="500" height="120"></canvas><div class="sig-foot">Unterschrift Mieter</div></div>
+        <button onclick="clearSig('ln-sig-mieter')" class="btn btn-secondary" style="margin-top:6px;padding:6px 14px;font-size:12px">Löschen</button>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="closeLNModal()">Abbrechen</button>
+      <button class="btn btn-primary" style="flex:1" onclick="saveLeistung()">💾 Speichern</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+      <button class="btn btn-primary" style="background:#0d9488;font-size:13px" onclick="genLNPDF('eigen')">📄 Leistungsnachweis PDF</button>
+      <button class="btn btn-primary" id="ln-gwh-pdf-btn" style="background:#7c3aed;font-size:13px;display:none" onclick="genLNPDF('gwh')">📄 GWH Formular PDF</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ RECHNUNGSADRESSEN MODAL ══ -->
+<div class="overlay" id="m-rechnungsadressen">
+  <div class="modal" style="max-width:540px">
+    <div class="modal-hd">
+      <div>
+        <h2 style="margin:0">Rechnungsadressen</h2>
+        <div style="font-size:12px;color:#64748b;margin-top:4px">Wird automatisch in den Leistungsnachweis eingetragen</div>
+      </div>
+      <button class="modal-close" onclick="closeModal('m-rechnungsadressen')">✕</button>
+    </div>
+    <div id="ra-list" style="margin-bottom:16px"></div>
+    <div class="section-label" id="ra-form-title">Neue Adresse</div>
+    <div class="fg" style="margin-top:8px">
+      <label>Auftraggeber-Kürzel <span style="font-weight:400;color:#64748b">(muss im Auftraggeber-Feld des Auftrags enthalten sein)</span></label>
+      <input type="text" id="ra-key" placeholder="z.B. GWH Frankfurt">
+    </div>
+    <div class="fg"><label>Firmenname / Name</label><input type="text" id="ra-name" placeholder="z.B. GWH Frankfurt GmbH"></div>
+    <div class="fg"><label>Straße, Hausnummer</label><input type="text" id="ra-strasse" placeholder="z.B. Mainzer Landstraße 1"></div>
+    <div class="fg"><label>PLZ, Ort</label><input type="text" id="ra-plzort" placeholder="z.B. 60000 Frankfurt"></div>
+    <input type="hidden" id="ra-edit-key">
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="cancelRAEdit()">Abbrechen</button>
+      <button class="btn btn-primary" style="flex:1" onclick="saveRechnungsadresse()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ KONTAKTE MODAL ══ -->
+<div class="overlay" id="m-kontakte">
+  <div class="modal" style="max-width:540px">
+    <div class="modal-hd">
+      <div>
+        <h2 style="margin:0">Kontakte</h2>
+        <div style="font-size:12px;color:#64748b;margin-top:4px">E-Mail-Adressen der Melder für automatische E-Mail-Entwürfe</div>
+      </div>
+      <button class="modal-close" onclick="closeModal('m-kontakte')">✕</button>
+    </div>
+    <div id="ko-list" style="margin-bottom:16px"></div>
+    <div class="section-label" id="ko-form-title">Neuer Kontakt</div>
+    <div class="fg" style="margin-top:8px">
+      <label>Kürzel <span style="font-weight:400;color:#64748b">(muss im Melder-Feld des Auftrags enthalten sein)</span></label>
+      <input type="text" id="ko-key" placeholder="z.B. Müller">
+    </div>
+    <div class="fg"><label>Name</label><input type="text" id="ko-name" placeholder="z.B. Max Müller"></div>
+    <div class="fg"><label>E-Mail</label><input type="email" id="ko-email" placeholder="z.B. mmueller@example.de"></div>
+    <div class="fg"><label>Telefon <span style="font-weight:400;color:#64748b">(optional)</span></label><input type="text" id="ko-tel" placeholder="z.B. 069 123456"></div>
+    <input type="hidden" id="ko-edit-key">
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="cancelKontaktEdit()">Abbrechen</button>
+      <button class="btn btn-primary" style="flex:1" onclick="saveKontakt()">Speichern</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/@azure/msal-browser@2.38.3/lib/msal-browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.3/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pizzip@3.1.7/dist/pizzip.min.js"></script>
+<script src="ln_template.js"></script>
+<script src="ln_template2.js"></script>
 <script>
-// ── Config ─────────────────────────────────────────────────────────────────
-const SB_URL = 'https://dzauqisqkkwsbouduuec.supabase.co';
-const SB_KEY = 'sb_publishable_wxXk85D1enG68N9X1zLpiQ_Hqf18uFO';
-const sb = supabase.createClient(SB_URL, SB_KEY);
-
-// ── State ──────────────────────────────────────────────────────────────────
-let data = [];
-let cur = null;       // current open order
-let exPhotos = [];    // existing photo URLs
-let newPhotos = [];   // {file, preview}
-
-// ── Load ───────────────────────────────────────────────────────────────────
-async function loadData() {
-  try {
-    const { data: rows, error } = await sb.from('auftraege').select('*').order('id', { ascending: false });
-    if (error) throw error;
-    data = rows || [];
-    renderStats();
-    renderBuero();
-    renderTeam();
-  } catch(e) {
-    toast('Fehler beim Laden: ' + e.message, 'err');
-  }
-}
-
-// ── Status badge ────────────────────────────────────────────────────────────
-const BADGE = {
-  'Offen':'b-offen','Angebot':'b-angebot',
-  'Angebot-angenommen':'b-angenommen','Angebot-abgelehnt':'b-abgelehnt',
-  'Arbeit-durchgeführt':'b-durchgeführt','Rechnung-schreiben':'b-rech-schreiben',
-  'Rechnung-gesendet':'b-rech-gesendet','Zahlungseingang':'b-zahlung',
-  'Zurückgestellt':'b-zurück'
-};
-const CARD_COLOR = {
-  'Offen':'#3b82f6','Angebot-angenommen':'#16a34a','Arbeit-durchgeführt':'#0d9488',
-  'Zurückgestellt':'#d97706','Rechnung-schreiben':'#ea580c',
-  'Rechnung-gesendet':'#7c3aed','Zahlungseingang':'#15803d'
-};
-function badge(s){ return `<span class="badge ${BADGE[s]||'b-angebot'}">${s||'–'}</span>`; }
-
-// ── Stats (nur 2026, alle vorhandenen Status dynamisch) ────────────────────
-function renderStats() {
-  const d26 = data.filter(r => r.jahr === 2026);
-  const c = {};
-  d26.forEach(r => { const s = r.status||'–'; c[s] = (c[s]||0)+1; });
-  // Farbzuordnung je Status
-  const COL = {
-    'Offen':'#2563eb','Angebot':'#64748b',
-    'Angebot-angenommen':'#16a34a','Angebot-abgelehnt':'#dc2626',
-    'Arbeit-durchgeführt':'#0d9488','Rechnung-schreiben':'#ea580c',
-    'Rechnung-gesendet':'#7c3aed','Zahlungseingang':'#15803d',
-    'Zurückgestellt':'#d97706'
-  };
-  // Gesamt zuerst, dann alle Status mit Anzahl > 0 sortiert nach Häufigkeit
-  const statusItems = Object.entries(c)
-    .sort((a,b) => b[1]-a[1])
-    .map(([s,n]) => ({lbl:s, n, col:COL[s]||'#64748b'}));
-  const all = [{lbl:'Gesamt 2026', n:d26.length, col:'#1e40af'}, ...statusItems];
-  document.getElementById('buero-stats').innerHTML = all.map(i =>
-    `<div class="stat"><div class="stat-num" style="color:${i.col}">${i.n}</div><div class="stat-lbl" style="max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${i.lbl}">${i.lbl}</div></div>`
-  ).join('');
-}
-
-// ── Filter ─────────────────────────────────────────────────────────────────
-function filtered(searchId, statusId) {
-  const q = (document.getElementById(searchId).value||'').toLowerCase();
-  const st = document.getElementById(statusId).value;
-  return data.filter(r => {
-    if (st && r.status !== st) return false;
-    if (q) return [r.auftrag,r.anschrift,r.beschreibung,r.auftraggeber,r.mieter,r.melder,r.rechnung]
-      .some(f => f && f.toLowerCase().includes(q));
-    return true;
-  });
-}
-
-// ── Büro ───────────────────────────────────────────────────────────────────
-function renderBuero() {
-  const rows = filtered('b-search','b-status');
-  if (!rows.length) {
-    document.getElementById('b-table').innerHTML = '<div class="loading">Keine Einträge gefunden</div>';
-    return;
-  }
-  document.getElementById('b-table').innerHTML = `<table>
-    <thead><tr>
-      <th>Pos</th><th>Auftrag</th><th>Datum</th><th>Anschrift</th><th>Beschreibung</th>
-      <th>Status</th><th>Auftraggeber</th><th>Rechnung</th><th>Summe</th><th>Melder</th><th>Mieter</th>
-    </tr></thead>
-    <tbody>${rows.map(r=>`<tr onclick="openBueroDetail(${r.id})">
-      <td><b>${r.pos||'–'}</b></td>
-      <td style="white-space:nowrap">${r.auftrag||'–'}</td>
-      <td style="white-space:nowrap">${r.datum||'–'}</td>
-      <td style="min-width:130px;white-space:pre-line">${r.anschrift||'–'}</td>
-      <td style="min-width:180px">${r.beschreibung||'–'}</td>
-      <td>${badge(r.status)}</td>
-      <td style="min-width:130px;white-space:pre-line">${r.auftraggeber||'–'}</td>
-      <td>${r.rechnung||'–'}</td>
-      <td style="white-space:nowrap">${r.summe!=null ? Number(r.summe).toLocaleString('de-DE',{style:'currency',currency:'EUR'}) : '–'}</td>
-      <td style="white-space:pre-line">${r.melder||'–'}</td>
-      <td style="white-space:pre-line">${r.mieter||'–'}</td>
-    </tr>`).join('')}</tbody></table>`;
-}
-
-function openBueroDetail(id) {
-  cur = data.find(r=>r.id===id); if(!cur) return;
-  document.getElementById('bd-title').textContent = cur.auftrag||'Auftrag';
-  document.getElementById('bd-badge').innerHTML = badge(cur.status);
-  document.getElementById('bd-status').value = cur.status||'Offen';
-  document.getElementById('bd-rechnung').value = cur.rechnung||'';
-  document.getElementById('bd-summe').value = cur.summe||'';
-
-  const fields = [
-    {l:'Datum',v:cur.datum},{l:'Pos.',v:cur.pos},
-    {l:'Anschrift',v:cur.anschrift,f:1},{l:'Beschreibung',v:cur.beschreibung,f:1},
-    {l:'Auftraggeber',v:cur.auftraggeber,f:1},{l:'Mieter',v:cur.mieter,f:1},
-    {l:'Melder',v:cur.melder,f:1},
-  ].filter(f=>f.v);
-  document.getElementById('bd-info').innerHTML = fields.map(f=>
-    `<div class="info-item ${f.f?'full':''}"><div class="lbl">${f.l}</div><div class="val">${f.v}</div></div>`
-  ).join('');
-
-  const bilder = cur.bilder||[];
-  document.getElementById('bd-fotos').innerHTML = bilder.length ? `
-    <div class="section-label">Fotos (${bilder.length})</div>
-    <div class="pgrid">${bilder.map(u=>`<div class="pthumb"><img src="${u}" onclick="window.open('${u}','_blank')"></div>`).join('')}</div>` : '';
-
-  document.getElementById('bd-bericht-section').innerHTML = cur.mitarbeiter_bericht ? `
-    <div class="section-label">Mitarbeiter-Bericht</div>
-    <div style="background:#f8fafc;border-radius:8px;padding:12px;font-size:13px;white-space:pre-wrap">${cur.mitarbeiter_bericht}</div>` : '';
-
-  document.getElementById('m-buero-detail').classList.add('open');
-}
-
-async function saveBuero() {
-  if(!cur) return;
-  const upd = {
-    status: document.getElementById('bd-status').value,
-    rechnung: document.getElementById('bd-rechnung').value||null,
-    summe: document.getElementById('bd-summe').value ? parseFloat(document.getElementById('bd-summe').value) : null,
-    updated_at: new Date().toISOString()
-  };
-  const {error} = await sb.from('auftraege').update(upd).eq('id',cur.id);
-  if(error){ toast('Fehler: '+error.message,'err'); return; }
-  Object.assign(cur, upd);
-  const idx = data.findIndex(r=>r.id===cur.id);
-  if(idx>=0) Object.assign(data[idx], upd);
-  renderBuero(); renderStats();
-  closeModal('m-buero-detail');
-  toast('Gespeichert ✓','ok');
-}
-
-// ── Team ───────────────────────────────────────────────────────────────────
-function renderTeam() {
-  const rows = filtered('t-search','t-status');
-  if(!rows.length){ document.getElementById('t-cards').innerHTML='<div class="loading">Keine Aufträge gefunden</div>'; return; }
-  document.getElementById('t-cards').innerHTML = rows.map(r=>`
-    <div class="card" onclick="openDetail(${r.id})" style="border-left-color:${CARD_COLOR[r.status]||'#94a3b8'}">
-      <div class="card-top">
-        <div>
-          <div style="font-size:12px;color:var(--muted);font-weight:700;margin-bottom:2px">
-            ${r.pos ? `<span style="color:var(--primary)">#${r.pos}</span>` : ''}
-            <span style="font-weight:400;margin-left:4px">${r.auftrag||'–'}</span>
-          </div>
-        </div>
-        ${badge(r.status)}
-      </div>
-      <div class="card-addr">${(r.anschrift||'').split('\n')[0]}</div>
-      <div class="card-desc">${r.beschreibung||''}</div>
-      <div class="card-foot">
-        <span>📅 ${r.datum||'–'}</span>
-        <span>${r.bilder?.length ? '📷 '+r.bilder.length : ''}</span>
-      </div>
-    </div>`).join('');
-}
-
-// ── Team Detail ────────────────────────────────────────────────────────────
-function openDetail(id) {
-  cur = data.find(r=>r.id===id); if(!cur) return;
-  exPhotos = [...(cur.bilder||[])];
-  newPhotos = [];
-  document.getElementById('d-title').textContent = cur.auftrag||'Auftrag';
-  document.getElementById('d-badge').innerHTML = badge(cur.status);
-  document.getElementById('d-status').value = cur.status||'Offen';
-  document.getElementById('d-bericht').value = cur.mitarbeiter_bericht||'';
-
-  const addrEncoded = encodeURIComponent((cur.anschrift||'').replace(/\n/g,', '));
-  const navBtn = cur.anschrift
-    ? `<button onclick="navigateTo('${(cur.anschrift||'').replace(/\n/g,', ').replace(/'/g,"\\'")}');event.stopPropagation()"
-        style="margin-top:6px;display:inline-flex;align-items:center;gap:5px;background:var(--primary);color:#fff;border:none;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer">
-        🧭 Navigation starten</button>`
-    : '';
-
-  const fields = [
-    {l:'Datum',v:cur.datum},{l:'Pos.',v:cur.pos ? `#${cur.pos}` : null},
-    {l:'Anschrift',v:cur.anschrift,f:1,extra:navBtn},{l:'Beschreibung',v:cur.beschreibung,f:1},
-    {l:'Mieter',v:cur.mieter,f:1},{l:'Auftraggeber',v:cur.auftraggeber,f:1},
-    {l:'Melder',v:cur.melder,f:1},
-  ].filter(f=>f.v);
-  document.getElementById('d-info').innerHTML = fields.map(f=>
-    `<div class="info-item ${f.f?'full':''}"><div class="lbl">${f.l}</div><div class="val">${f.v}</div>${f.extra||''}</div>`
-  ).join('');
-  renderPgrid();
-  document.getElementById('m-detail').classList.add('open');
-}
-
-function renderPgrid() {
-  document.getElementById('pgrid').innerHTML =
-    exPhotos.map((u,i)=>`<div class="pthumb"><img src="${u}" onclick="window.open('${u}','_blank')"><button class="premove" onclick="exPhotos.splice(${i},1);renderPgrid()">×</button></div>`).join('') +
-    newPhotos.map((p,i)=>`<div class="pthumb"><img src="${p.prev}"><button class="premove" onclick="newPhotos.splice(${i},1);renderPgrid()">×</button></div>`).join('');
-}
-
-function addPhotos(files) {
-  Array.from(files).forEach(f=>{
-    const r=new FileReader();
-    r.onload=e=>{newPhotos.push({file:f,prev:e.target.result});renderPgrid()};
-    r.readAsDataURL(f);
-  });
-}
-function onDrop(e){e.preventDefault();document.getElementById('pzone').classList.remove('drag');addPhotos(e.dataTransfer.files)}
-
-async function uploadAll() {
-  const urls=[...exPhotos];
-  for(const p of newPhotos){
-    const name=`${Date.now()}_${p.file.name.replace(/[^a-z0-9.]/gi,'_')}`;
-    const {error}=await sb.storage.from('bilder').upload(name,p.file,{contentType:p.file.type});
-    if(error) throw error;
-    const {data:pub}=sb.storage.from('bilder').getPublicUrl(name);
-    urls.push(pub.publicUrl);
-  }
-  return urls;
-}
-
-async function saveDetail() {
-  if(!cur) return;
-  const btn=document.getElementById('d-save-btn');
-  btn.disabled=true; btn.textContent='Speichern…';
-  try {
-    const bilder = await uploadAll();
-    const upd = {
-      status: document.getElementById('d-status').value,
-      mitarbeiter_bericht: document.getElementById('d-bericht').value||null,
-      bilder,
-      updated_at: new Date().toISOString()
-    };
-    const {error}=await sb.from('auftraege').update(upd).eq('id',cur.id);
-    if(error) throw error;
-    Object.assign(cur,upd);
-    const idx=data.findIndex(r=>r.id===cur.id);
-    if(idx>=0) Object.assign(data[idx],upd);
-    renderTeam(); renderBuero(); renderStats();
-    closeModal('m-detail');
-    toast('Gespeichert ✓','ok');
-  } catch(e){ toast('Fehler: '+e.message,'err'); }
-  finally{ btn.disabled=false; btn.textContent='💾 Speichern'; }
-}
-
-// ── Neuer Auftrag ──────────────────────────────────────────────────────────
-function openNew() {
-  ['n-auftrag','n-anschrift','n-beschreibung','n-auftraggeber','n-mieter','n-melder'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('n-datum').value=new Date().toISOString().split('T')[0];
-  document.getElementById('n-status').value='Offen';
-  document.getElementById('m-new').classList.add('open');
-}
-
-async function saveNew() {
-  const auftrag=document.getElementById('n-auftrag').value.trim();
-  if(!auftrag){toast('Bitte Auftragsnummer eingeben','err');return;}
-  const datum=document.getElementById('n-datum').value;
-  const datumFmt=datum?new Date(datum).toLocaleDateString('de-DE'):'';
-  const year=datum?new Date(datum).getFullYear():new Date().getFullYear();
-  const nextPos=(data.filter(r=>r.jahr==year).length)+1;
-  const row={
-    pos:nextPos, auftrag, datum:datumFmt, jahr:year,
-    anschrift:document.getElementById('n-anschrift').value.trim()||null,
-    beschreibung:document.getElementById('n-beschreibung').value.trim()||null,
-    auftraggeber:document.getElementById('n-auftraggeber').value.trim()||null,
-    mieter:document.getElementById('n-mieter').value.trim()||null,
-    melder:document.getElementById('n-melder').value.trim()||null,
-    status:document.getElementById('n-status').value,
-  };
-  const {data:ins,error}=await sb.from('auftraege').insert([row]).select();
-  if(error){toast('Fehler: '+error.message,'err');return;}
-  data.unshift(ins[0]);
-  renderBuero(); renderTeam(); renderStats();
-  closeModal('m-new');
-  toast('Auftrag angelegt ✓','ok');
-}
-
-// ── Navigation ────────────────────────────────────────────────────────────
-function navigateTo(addr) {
-  const q = encodeURIComponent(addr);
-  // Popup mit Auswahl: Apple Karten oder Google Maps
-  const overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
-  overlay.innerHTML = `
-    <div style="background:#fff;border-radius:16px 16px 0 0;width:100%;max-width:480px;padding:20px 16px 32px">
-      <div style="font-size:15px;font-weight:700;margin-bottom:16px;text-align:center">Navigation öffnen mit…</div>
-      <div style="display:flex;flex-direction:column;gap:10px">
-        <button onclick="window.open('maps://maps.apple.com/?q=${q}','_blank');this.closest('[style]').remove()"
-          style="padding:14px;border-radius:10px;border:1.5px solid #e2e8f0;background:#fff;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:10px">
-          🍎 Apple Karten
-        </button>
-        <button onclick="window.open('https://maps.google.com/maps?q=${q}','_blank');this.closest('[style]').remove()"
-          style="padding:14px;border-radius:10px;border:1.5px solid #e2e8f0;background:#fff;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:10px">
-          🗺️ Google Maps
-        </button>
-        <button onclick="this.closest('[style]').remove()"
-          style="padding:12px;border-radius:10px;border:none;background:#f1f5f9;font-size:14px;cursor:pointer;color:#64748b;font-weight:600">
-          Abbrechen
-        </button>
-      </div>
-    </div>`;
-  overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
-  document.body.appendChild(overlay);
-}
-
-// ── Helpers ────────────────────────────────────────────────────────────────
-function switchTab(t) {
-  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',(i===0)===(t==='buero')));
-  document.getElementById('buero-view').classList.toggle('active',t==='buero');
-  document.getElementById('team-view').classList.toggle('active',t==='team');
-}
-function closeModal(id){ document.getElementById(id).classList.remove('open'); cur=null; }
-function toast(msg,type=''){
-  const el=document.getElementById('toast');
-  el.textContent=msg; el.className='toast show'+(type?' '+type:'');
-  setTimeout(()=>el.className='toast',3000);
-}
-
-// Close on backdrop click
-document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open')}));
-
-// Init
-loadData();
-</script>
-</body>
-</html>
+// ── Config ────────────
