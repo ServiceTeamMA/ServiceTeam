@@ -537,4 +537,1571 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 #4f46e5}
 <script src="ln_template.js"></script>
 <script src="ln_template2.js"></script>
 <script>
-// ── Config ────────────
+// ── Config ─────────────────────────────────────────────────────────────────
+const SB_URL = 'https://dzauqisqkkwsbouduuec.supabase.co';
+const SB_KEY = 'sb_publishable_wxXk85D1enG68N9X1zLpiQ_Hqf18uFO';
+const sb = supabase.createClient(SB_URL, SB_KEY);
+
+// ── Microsoft Graph / MSAL ─────────────────────────────────────────────────
+const MSAL_CONFIG = {
+  auth: {
+    clientId: '0fdd9dea-c489-458d-b0b1-e4213c13d396',
+    authority: 'https://login.microsoftonline.com/689ff0a3-d66f-40ad-844a-76ad1182fe78',
+    redirectUri: 'http://localhost:8080/redirect.html'
+  },
+  cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: false }
+};
+const GRAPH_SCOPES = ['Mail.ReadWrite', 'Files.ReadWrite'];
+const ONEDRIVE_BASE = 'ServiceTeam GmbH/Leistungsnachweise';
+let msalInstance = null;
+
+function getMSAL() {
+  if (!msalInstance) msalInstance = new msal.PublicClientApplication(MSAL_CONFIG);
+  return msalInstance;
+}
+
+async function getGraphToken() {
+  const app = getMSAL();
+  await app.initialize();
+
+  // Stale interaction-Lock aufräumen (in BEIDEN Speichern – cacheLocation ist localStorage)
+  [sessionStorage, localStorage].forEach(store => {
+    Object.keys(store).filter(k => k.toLowerCase().includes('interaction')).forEach(k => store.removeItem(k));
+  });
+
+  const accounts = app.getAllAccounts();
+  console.log('MSAL accounts:', accounts.length);
+  if (accounts.length > 0) {
+    try {
+      const r = await app.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: accounts[0] });
+      console.log('Silent token OK');
+      return r.accessToken;
+    } catch(e) {
+      console.warn('Silent token failed:', e.errorCode, e.message);
+    }
+  }
+  try {
+    console.log('Starting loginPopup…');
+    const r = await app.loginPopup({ scopes: GRAPH_SCOPES, prompt: 'select_account' });
+    console.log('loginPopup OK, account:', r.account?.username);
+    return r.accessToken;
+  } catch(e) {
+    console.error('loginPopup failed:', e.errorCode, e.message);
+    throw new Error('Microsoft-Anmeldung fehlgeschlagen: ' + (e.errorCode||'') + ' ' + (e.message||''));
+  }
+}
+
+async function blobToBase64(blob) {
+  return new Promise(res => {
+    const reader = new FileReader();
+    reader.onload = () => res(reader.result.split(',')[1]);
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function createOutlookDraft({ to, subject, body, attachmentBlob, attachmentName }) {
+  const token = await getGraphToken();
+  const message = {
+    subject,
+    body: { contentType: 'Text', content: body },
+    toRecipients: [{ emailAddress: { address: to } }]
+  };
+  if (attachmentBlob) {
+    const b64 = await blobToBase64(attachmentBlob);
+    message.attachments = [{
+      '@odata.type': '#microsoft.graph.fileAttachment',
+      name: attachmentName,
+      contentBytes: b64
+    }];
+  }
+  const resp = await fetch('https://graph.microsoft.com/v1.0/me/messages', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(message)
+  });
+  if (!resp.ok) {
+    const err = await resp.json();
+    throw new Error(err.error?.message || 'Graph API Fehler');
+  }
+  const draft = await resp.json();
+  window.open(`https://outlook.office.com/mail/drafts/${draft.id}`, '_blank');
+  return draft;
+}
+
+// ── OneDrive Speicherung ───────────────────────────────────────────────────
+async function ensureOneDriveFolder(token, path) {
+  const parts = path.split('/');
+  let built = '';
+  for (const part of parts) {
+    const parent = built ? `root:/${built}:` : 'root';
+    built = built ? built + '/' + part : part;
+    const url = `https://graph.microsoft.com/v1.0/me/drive/${parent}/children`;
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: part, folder: {}, '@microsoft.graph.conflictBehavior': 'ignore' })
+    });
+  }
+}
+
+async function uploadToOneDrive(token, blob, odPath) {
+  const encoded = odPath.split('/').map(encodeURIComponent).join('/');
+  const resp = await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${encoded}:/content`, {
+    method: 'PUT',
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': blob.type || 'application/octet-stream' },
+    body: blob
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(()=>({}));
+    throw new Error('Upload fehlgeschlagen: ' + (err.error?.message || resp.status));
+  }
+  return await resp.json();
+}
+
+async function getOneDrivePDF(token, itemId) {
+  const resp = await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${itemId}/content?format=pdf`, {
+    headers: { 'Authorization': 'Bearer ' + token }
+  });
+  if (!resp.ok) throw new Error('PDF-Konvertierung fehlgeschlagen');
+  return await resp.blob();
+}
+
+// Eine Datei aus OneDrive löschen (für temporäre Konvertierungs-Dateien).
+async function deleteOneDriveItem(token, itemId) {
+  await fetch(`https://graph.microsoft.com/v1.0/me/drive/items/${itemId}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': 'Bearer ' + token }
+  });
+}
+
+// Wandelt eine Word-Datei 1:1 in PDF um – über die OneDrive/Graph-Konvertierung,
+// d.h. exakt das Layout der Word-Vorlage. Das Word wird dafür nur TEMPORÄR
+// hochgeladen und danach wieder gelöscht – es landet NICHT im Word-Ordner.
+async function convertWordToPdf(token, wordBlob, baseName) {
+  await ensureOneDriveFolder(token, ONEDRIVE_BASE + '/_temp');
+  const tmpPath = `${ONEDRIVE_BASE}/_temp/${baseName}_${Date.now()}.docx`;
+  const tmpItem = await uploadToOneDrive(token, wordBlob, tmpPath);
+  try {
+    return await getOneDrivePDF(token, tmpItem.id);
+  } finally {
+    deleteOneDriveItem(token, tmpItem.id).catch(()=>{});
+  }
+}
+
+// Speichert NUR den gewählten Dateityp in den jeweiligen OneDrive-Ordner.
+async function saveToOneDrive(typ) {
+  if (!cur) return;
+  try {
+    const baseName = 'Leistungsnachweis_' + (cur.auftrag||'Auftrag').replace(/[^\w-]/g,'_');
+    const token = await getGraphToken();
+
+    if (typ === 'word') {
+      toast('Word wird in OneDrive gespeichert…', 'ok');
+      await ensureOneDriveFolder(token, ONEDRIVE_BASE + '/Word');
+      const wordBlob = await genWordLeistungsnachweis(true);
+      if (!wordBlob) return;
+      await uploadToOneDrive(token, wordBlob, `${ONEDRIVE_BASE}/Word/${baseName}.docx`);
+      toast('✓ Word gespeichert → Leistungsnachweise/Word', 'ok');
+    } else {
+      toast('PDF wird 1:1 aus der Word-Vorlage erstellt & in OneDrive gespeichert…', 'ok');
+      await ensureOneDriveFolder(token, ONEDRIVE_BASE + '/PDF');
+      const wordBlob = await genWordLeistungsnachweis(true);
+      if (!wordBlob) return;
+      const pdfBlob = await convertWordToPdf(token, wordBlob, baseName);
+      await uploadToOneDrive(token, pdfBlob, `${ONEDRIVE_BASE}/PDF/${baseName}.pdf`);
+      toast('✓ PDF gespeichert → Leistungsnachweise/PDF', 'ok');
+    }
+  } catch(e) {
+    console.error('saveToOneDrive failed:', e);
+    toast('Fehler: ' + (e.message || e.errorCode || e), 'err');
+  }
+}
+
+// ── State ──────────────────────────────────────────────────────────────────
+let data = [];
+let cur = null;       // current open order
+let exPhotos = [];    // existing photo URLs
+let newPhotos = [];   // {file, preview}
+let activeJahr = 2026;
+let bueroSortAsc = null; // null=unsortiert, true=aufsteigend, false=absteigend
+
+function onYearChange() {
+  activeJahr = parseInt(document.getElementById('yearSelect').value);
+  loadData();
+}
+
+// ── Team Detail Einsatz ────────────────────────────────────────────────────
+function initTeamTimeSelects(){
+  const times=[];
+  for(let h=6;h<=22;h++) for(let m of [0,30]){
+    if(h===22&&m===30) continue;
+    times.push(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`);
+  }
+  ['d-von','d-bis'].forEach(id=>{
+    const sel=document.getElementById(id); if(!sel) return;
+    sel.innerHTML=`<option value="">– Uhrzeit –</option>`+times.map(t=>`<option value="${t}">${t} Uhr</option>`).join('');
+  });
+}
+
+function calcTeamStunden(){
+  const von=document.getElementById('d-von').value;
+  const bis=document.getElementById('d-bis').value;
+  const el=document.getElementById('d-stunden-info');
+  if(!von||!bis){el.textContent='';return;}
+  const [vh,vm]=von.split(':').map(Number);
+  const [bh,bm]=bis.split(':').map(Number);
+  const mins=(bh*60+bm)-(vh*60+vm);
+  if(mins<=0){el.textContent='';return;}
+  const h=mins/60;
+  const hStr=h%1===0?h.toString():h.toFixed(1).replace('.',',');
+  el.textContent=`${von}–${bis} Uhr · ${hStr} Stunde${h===1?'':'n'}`;
+}
+
+function addTeamMaterial(bez='',menge=''){
+  const d=document.createElement('div');
+  d.style.cssText='display:grid;grid-template-columns:1fr 1fr 32px;gap:6px;align-items:center;margin-bottom:6px';
+  d.innerHTML=`<input type="text" class="d-mat-bez" placeholder="Bezeichnung" value="${escAttr(bez)}" style="border:1.5px solid var(--border);border-radius:6px;padding:8px 10px;font-size:13px;font-family:inherit;outline:none;width:100%;background:#fff">
+    <input type="text" class="d-mat-menge" placeholder="Menge (z.B. 2 Stück)" value="${escAttr(menge)}" style="border:1.5px solid var(--border);border-radius:6px;padding:8px 10px;font-size:13px;font-family:inherit;outline:none;width:100%;background:#fff">
+    <button class="ln-row-del" onclick="this.parentNode.remove()">×</button>`;
+  document.getElementById('d-material-list').appendChild(d);
+}
+
+function collectTeamMaterial(){
+  return [...document.querySelectorAll('#d-material-list [class*="d-mat-bez"]')].map(inp=>{
+    const row=inp.parentNode;
+    return {bez:inp.value.trim(), menge:row.querySelector('.d-mat-menge').value.trim()};
+  }).filter(m=>m.bez||m.menge);
+}
+
+// ── Load ───────────────────────────────────────────────────────────────────
+async function loadData() {
+  try {
+    const { data: rows, error } = await sb.from('auftraege').select('*').eq('jahr', activeJahr).order('id', { ascending: false });
+    if (error) throw error;
+    data = rows || [];
+    renderStats();
+    renderBuero();
+    renderTeam();
+  } catch(e) {
+    const msg = (e && e.message) ? e.message : String(e);
+    const html = '<div class="loading" style="color:#dc2626;white-space:pre-wrap">⚠️ Fehler beim Laden:\n' + msg + '</div>';
+    const bt = document.getElementById('b-table'); if (bt) bt.innerHTML = html;
+    const tc = document.getElementById('t-cards'); if (tc) tc.innerHTML = html;
+    toast('Fehler beim Laden: ' + msg, 'err');
+  }
+}
+
+// ── Status badge ────────────────────────────────────────────────────────────
+const BADGE = {
+  'Offen':'b-offen','Angebot':'b-angebot',
+  'Angebot angenommen':'b-angenommen','Angebot abgelehnt':'b-abgelehnt',
+  'Arbeit durchgeführt':'b-durchgeführt','Leistungsnachweis':'b-leistungsnachweis',
+  'Rechnung gesendet':'b-rech-gesendet','Zahlungseingang':'b-zahlung',
+  'Zurückgestellt':'b-zurück'
+};
+const CARD_COLOR = {
+  'Offen':'#3b82f6','Angebot angenommen':'#16a34a','Arbeit durchgeführt':'#0d9488',
+  'Zurückgestellt':'#d97706','Leistungsnachweis':'#ea580c',
+  'Rechnung gesendet':'#7c3aed','Zahlungseingang':'#15803d'
+};
+function badge(s){ return `<span class="badge ${BADGE[s]||'b-angebot'}">${s||'–'}</span>`; }
+
+// ── Stats ──────────────────────────────────────────────────────────────────
+function setStatFilter(val) {
+  const sel = document.getElementById('b-status');
+  if (sel) sel.value = val;
+  renderBuero();
+  renderStats();
+}
+
+function renderStats() {
+  const d26 = data.filter(r => r.jahr === activeJahr);
+  const c = {};
+  d26.forEach(r => { const s = r.status||'–'; c[s] = (c[s]||0)+1; });
+  const get = (...keys) => keys.reduce((s,k) => s + (c[k]||0), 0);
+  const activeFilter = (document.getElementById('b-status')||{}).value || '';
+  const items = [
+    { lbl: 'Gesamt ' + activeJahr, n: d26.length, col: '#4f46e5', filter: '' },
+    { lbl: 'Offen',                n: get('Offen','offen'),               col: '#0ea5e9', filter: 'Offen' },
+    { lbl: 'Arbeit durchgeführt',  n: get('Arbeit durchgeführt'),          col: '#10b981', filter: 'Arbeit durchgeführt' },
+    { lbl: 'Rechnung gesendet',    n: get('Rechnung gesendet'),            col: '#8b5cf6', filter: 'Rechnung gesendet' },
+    { lbl: 'Zahlungseingang',      n: get('Zahlungseingang','zahlungseingang'), col: '#f59e0b', filter: 'Zahlungseingang' },
+  ];
+  document.getElementById('buero-stats').innerHTML = items.map(i => {
+    const isActive = i.filter === activeFilter;
+    const activeStyle = isActive ? `;box-shadow:0 0 0 2px ${i.col},0 4px 16px rgba(0,0,0,.08)` : '';
+    return `<div class="stat" style="color:${i.col}${activeStyle}" onclick="setStatFilter('${i.filter}')">
+      <div class="stat-num">${i.n}</div>
+      <div class="stat-lbl">${i.lbl}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Filter ─────────────────────────────────────────────────────────────────
+function filtered(searchId, statusId) {
+  const q = (document.getElementById(searchId).value||'').toLowerCase();
+  const st = document.getElementById(statusId).value;
+  return data.filter(r => {
+    if (st && r.status !== st) return false;
+    if (q) return [r.auftrag,r.anschrift,r.beschreibung,r.auftraggeber,r.mieter,r.melder,r.rechnung]
+      .some(f => f && f.toLowerCase().includes(q));
+    return true;
+  });
+}
+
+// ── Büro ───────────────────────────────────────────────────────────────────
+function togglePosSort() {
+  bueroSortAsc = bueroSortAsc === true ? false : true;
+  renderBuero();
+}
+
+function renderBuero() {
+  let rows = filtered('b-search','b-status');
+  if (!rows.length) {
+    document.getElementById('b-table').innerHTML = '<div class="loading">Keine Einträge gefunden</div>';
+    return;
+  }
+  if (bueroSortAsc !== null) {
+    rows = [...rows].sort((a, b) => {
+      const pa = a.pos || '', pb = b.pos || '';
+      const na = parseFloat(pa), nb = parseFloat(pb);
+      if (!isNaN(na) && !isNaN(nb)) return bueroSortAsc ? na - nb : nb - na;
+      return bueroSortAsc ? pa.localeCompare(pb, 'de') : pb.localeCompare(pa, 'de');
+    });
+  }
+  const sortIcon = bueroSortAsc === null ? ' ⇅' : bueroSortAsc ? ' ↑' : ' ↓';
+  document.getElementById('b-table').innerHTML = `<table>
+    <thead><tr>
+      <th onclick="togglePosSort()" style="cursor:pointer;user-select:none">Pos${sortIcon}</th><th>Auftrag</th><th>Datum</th><th>Anschrift</th><th>Beschreibung</th>
+      <th>Status</th><th>Auftraggeber</th><th>Rechnung</th><th>Summe</th><th>Melder</th><th>Mieter</th>
+    </tr></thead>
+    <tbody>${rows.map(r=>`<tr onclick="openBueroDetail(${r.id})">
+      <td><b>${r.pos||'–'}</b></td>
+      <td style="white-space:nowrap">${r.auftrag||'–'}</td>
+      <td style="white-space:nowrap">${r.datum||'–'}</td>
+      <td style="min-width:130px;white-space:pre-line">${r.anschrift||'–'}</td>
+      <td style="min-width:180px">${r.beschreibung||'–'}</td>
+      <td>${badge(r.status)}</td>
+      <td style="min-width:130px;white-space:pre-line">${r.auftraggeber||'–'}</td>
+      <td>${r.rechnung||'–'}</td>
+      <td style="white-space:nowrap">${r.summe!=null ? Number(r.summe).toLocaleString('de-DE',{style:'currency',currency:'EUR'}) : '–'}</td>
+      <td style="white-space:pre-line">${r.melder||'–'}</td>
+      <td style="white-space:pre-line">${r.mieter||'–'}</td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+function openBueroDetail(id) {
+  cur = data.find(r=>r.id===id); if(!cur) return;
+  document.getElementById('bd-title').textContent = cur.auftrag||'Auftrag';
+  document.getElementById('bd-badge').innerHTML = badge(cur.status);
+  document.getElementById('bd-status').value = cur.status||'Offen';
+  document.getElementById('bd-rechnung').value = cur.rechnung||'';
+  document.getElementById('bd-summe').value = cur.summe||'';
+
+  const fields = [
+    {l:'Datum',v:cur.datum},{l:'Pos.',v:cur.pos},
+    {l:'Anschrift',v:cur.anschrift,f:1},{l:'Beschreibung',v:cur.beschreibung,f:1},
+    {l:'Auftraggeber',v:cur.auftraggeber,f:1},{l:'Mieter',v:cur.mieter,f:1},
+    {l:'Melder',v:cur.melder,f:1},
+  ].filter(f=>f.v);
+  document.getElementById('bd-info').innerHTML = fields.map(f=>
+    `<div class="info-item ${f.f?'full':''}"><div class="lbl">${f.l}</div><div class="val">${f.v}</div></div>`
+  ).join('');
+
+  const bilder = cur.bilder||[];
+  document.getElementById('bd-fotos').innerHTML = bilder.length ? `
+    <div class="section-label">Fotos (${bilder.length})</div>
+    <div class="pgrid">${bilder.map(u=>`<div class="pthumb"><img src="${u}" onclick="window.open('${u}','_blank')"></div>`).join('')}</div>` : '';
+
+  let ez={};
+  try { const p=JSON.parse(cur.mitarbeiter_bericht||'{}'); if(p&&typeof p==='object'&&!Array.isArray(p)) ez=p; } catch(e){}
+  const hasEinsatz = ez.leistungsdatum||ez.von||ez.taetigkeit||(ez.material&&ez.material.length);
+  document.getElementById('bd-bericht-section').innerHTML = hasEinsatz ? `
+    <div class="section-label">Einsatz-Details</div>
+    <div style="background:#f8fafc;border-radius:8px;padding:12px;font-size:13px">
+      ${ez.leistungsdatum?`<div style="margin-bottom:5px"><b>Leistungsdatum:</b> ${fmtDate(ez.leistungsdatum)}</div>`:''}
+      ${ez.anzahl?`<div style="margin-bottom:5px"><b>Anzahl Handwerker:</b> ${ez.anzahl}</div>`:''}
+      ${ez.stundenInfo?`<div style="margin-bottom:5px"><b>Arbeitszeit:</b> ${ez.stundenInfo}</div>`:''}
+      ${ez.taetigkeit?`<div style="margin-bottom:5px"><b>Tätigkeit:</b> ${ez.taetigkeit}</div>`:''}
+      ${ez.material&&ez.material.length?`<div><b>Material:</b> ${ez.material.map(m=>`${m.bez}${m.menge?' – '+m.menge:''}`).join(', ')}</div>`:''}
+    </div>` : '';
+
+  renderBDLNSection(cur);
+
+  // ── Automatik-Info: Kontakt + Rechnungsadresse ──
+  const agLine   = (cur.auftraggeber||'').split('\n')[0].trim().toLowerCase();
+  const melderLn = (cur.melder||'').split('\n')[0].trim().toLowerCase();
+  const raMatch  = Object.values(getRAs()).find(r => agLine.includes(r.key.toLowerCase()) || r.key.toLowerCase().includes(agLine));
+  const koMatch  = Object.values(getKontakte()).find(k => melderLn.includes(k.key.toLowerCase()) || k.key.toLowerCase().includes(melderLn));
+  const hints = [];
+  if (raMatch) hints.push(`🏢 <b>Rechnungsadresse:</b> ${raMatch.name}`);
+  else if (cur.auftraggeber) hints.push(`🏢 <b>Rechnungsadresse:</b> <span style="color:#f59e0b">Kein Eintrag gefunden</span>`);
+  if (koMatch) hints.push(`📋 <b>E-Mail an:</b> ${koMatch.name} &lt;${koMatch.email}&gt;`);
+  else if (cur.melder) hints.push(`📋 <b>Kontakt:</b> <span style="color:#f59e0b">Kein Eintrag gefunden</span>`);
+  const infoEl = document.getElementById('bd-auto-info');
+  if (infoEl) {
+    infoEl.innerHTML = hints.map(h=>`<div style="padding:4px 0;font-size:12px">${h}</div>`).join('');
+    infoEl.style.display = hints.length ? '' : 'none';
+  }
+
+  document.getElementById('m-buero-detail').classList.add('open');
+}
+
+async function saveBuero() {
+  if(!cur) return;
+  const upd = {
+    status: document.getElementById('bd-status').value,
+    rechnung: document.getElementById('bd-rechnung').value||null,
+    summe: document.getElementById('bd-summe').value ? parseFloat(document.getElementById('bd-summe').value) : null,
+    updated_at: new Date().toISOString()
+  };
+  const {error} = await sb.from('auftraege').update(upd).eq('id',cur.id);
+  if(error){ toast('Fehler: '+error.message,'err'); return; }
+  Object.assign(cur, upd);
+  const idx = data.findIndex(r=>r.id===cur.id);
+  if(idx>=0) Object.assign(data[idx], upd);
+  renderBuero(); renderStats();
+  closeModal('m-buero-detail');
+  toast('Gespeichert ✓','ok');
+}
+
+// ── Team ───────────────────────────────────────────────────────────────────
+function renderTeam() {
+  const rows = filtered('t-search','t-status');
+  if(!rows.length){ document.getElementById('t-cards').innerHTML='<div class="loading">Keine Aufträge gefunden</div>'; return; }
+  document.getElementById('t-cards').innerHTML = rows.map(r=>`
+    <div class="card" onclick="openDetail(${r.id})" style="border-left-color:${CARD_COLOR[r.status]||'#94a3b8'}">
+      <div class="card-top">
+        <div>
+          <div style="font-size:12px;color:var(--muted);font-weight:700;margin-bottom:2px">
+            ${r.pos ? `<span style="color:var(--primary)">#${r.pos}</span>` : ''}
+            <span style="font-weight:400;margin-left:4px">${r.auftrag||'–'}</span>
+          </div>
+        </div>
+        ${badge(r.status)}
+      </div>
+      <div class="card-addr">${(r.anschrift||'').split('\n')[0]}</div>
+      <div class="card-desc">${r.beschreibung||''}</div>
+      <div class="card-foot">
+        <span>📅 ${r.datum||'–'}</span>
+        <span>${r.bilder?.length ? '📷 '+r.bilder.length : ''}</span>
+      </div>
+    </div>`).join('');
+}
+
+// ── Team Detail ────────────────────────────────────────────────────────────
+function openDetail(id) {
+  cur = data.find(r=>r.id===id); if(!cur) return;
+  exPhotos = [...(cur.bilder||[])];
+  newPhotos = [];
+  document.getElementById('d-title').textContent = cur.auftrag||'Auftrag';
+  document.getElementById('d-badge').innerHTML = badge(cur.status);
+  document.getElementById('d-status').value = cur.status||'Offen';
+  initTeamTimeSelects();
+  let einsatz = {};
+  try { const p=JSON.parse(cur.mitarbeiter_bericht||'{}'); if(p&&typeof p==='object'&&!Array.isArray(p)) einsatz=p; } catch(e){}
+  document.getElementById('d-leistungsdatum').value = einsatz.leistungsdatum || new Date().toISOString().split('T')[0];
+  document.getElementById('d-anzahl').value = einsatz.anzahl || 1;
+  document.getElementById('d-von').value = einsatz.von || '';
+  document.getElementById('d-bis').value = einsatz.bis || '';
+  document.getElementById('d-taetigkeit').value = einsatz.taetigkeit || '';
+  document.getElementById('d-material-list').innerHTML = '';
+  (einsatz.material||[]).forEach(m=>addTeamMaterial(m.bez,m.menge));
+  calcTeamStunden();
+  clearSig('d-sig-hw'); clearSig('d-sig-mieter');
+  initSigPad('d-sig-hw'); initSigPad('d-sig-mieter');
+  if(einsatz.sigs){
+    if(einsatz.sigs.hw)     setTimeout(()=>drawSigFromData('d-sig-hw',    einsatz.sigs.hw),    100);
+    if(einsatz.sigs.mieter) setTimeout(()=>drawSigFromData('d-sig-mieter',einsatz.sigs.mieter),100);
+  }
+
+  const addrEncoded = encodeURIComponent((cur.anschrift||'').replace(/\n/g,', '));
+  const navBtn = cur.anschrift
+    ? `<button onclick="navigateTo('${(cur.anschrift||'').replace(/\n/g,', ').replace(/'/g,"\\'")}');event.stopPropagation()"
+        style="margin-top:6px;display:inline-flex;align-items:center;gap:5px;background:var(--primary);color:#fff;border:none;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer">
+        🧭 Navigation starten</button>`
+    : '';
+
+  const fields = [
+    {l:'Datum',v:cur.datum},{l:'Pos.',v:cur.pos ? `#${cur.pos}` : null},
+    {l:'Anschrift',v:cur.anschrift,f:1,extra:navBtn},{l:'Beschreibung',v:cur.beschreibung,f:1},
+    {l:'Mieter',v:cur.mieter,f:1},{l:'Auftraggeber',v:cur.auftraggeber,f:1},
+    {l:'Melder',v:cur.melder,f:1},
+  ].filter(f=>f.v);
+  document.getElementById('d-info').innerHTML = fields.map(f=>
+    `<div class="info-item ${f.f?'full':''}"><div class="lbl">${f.l}</div><div class="val">${f.v}</div>${f.extra||''}</div>`
+  ).join('');
+  renderPgrid();
+  document.getElementById('m-detail').classList.add('open');
+}
+
+function renderPgrid() {
+  document.getElementById('pgrid').innerHTML =
+    exPhotos.map((u,i)=>`<div class="pthumb"><img src="${u}" onclick="window.open('${u}','_blank')"><button class="premove" onclick="exPhotos.splice(${i},1);renderPgrid()">×</button></div>`).join('') +
+    newPhotos.map((p,i)=>`<div class="pthumb"><img src="${p.prev}"><button class="premove" onclick="newPhotos.splice(${i},1);renderPgrid()">×</button></div>`).join('');
+}
+
+function addPhotos(files) {
+  Array.from(files).forEach(f=>{
+    const r=new FileReader();
+    r.onload=e=>{newPhotos.push({file:f,prev:e.target.result});renderPgrid()};
+    r.readAsDataURL(f);
+  });
+}
+function onDrop(e){e.preventDefault();document.getElementById('pzone').classList.remove('drag');addPhotos(e.dataTransfer.files)}
+
+async function uploadAll() {
+  const urls=[...exPhotos];
+  for(const p of newPhotos){
+    const name=`${Date.now()}_${p.file.name.replace(/[^a-z0-9.]/gi,'_')}`;
+    const {error}=await sb.storage.from('bilder').upload(name,p.file,{contentType:p.file.type});
+    if(error) throw error;
+    const {data:pub}=sb.storage.from('bilder').getPublicUrl(name);
+    urls.push(pub.publicUrl);
+  }
+  return urls;
+}
+
+async function saveDetail() {
+  if(!cur) return;
+  const btn=document.getElementById('d-save-btn');
+  btn.disabled=true; btn.textContent='Speichern…';
+  try {
+    const bilder = await uploadAll();
+    const einsatz = {
+      leistungsdatum: document.getElementById('d-leistungsdatum').value,
+      anzahl: parseInt(document.getElementById('d-anzahl').value)||1,
+      von: document.getElementById('d-von').value,
+      bis: document.getElementById('d-bis').value,
+      stundenInfo: document.getElementById('d-stunden-info').textContent,
+      taetigkeit: document.getElementById('d-taetigkeit').value||null,
+      material: collectTeamMaterial(),
+      sigs: {
+        hw:     getSigData('d-sig-hw'),
+        mieter: getSigData('d-sig-mieter'),
+      },
+    };
+    const upd = {
+      status: 'Arbeit durchgeführt',
+      mitarbeiter_bericht: JSON.stringify(einsatz),
+      bilder,
+      updated_at: new Date().toISOString()
+    };
+    const {error}=await sb.from('auftraege').update(upd).eq('id',cur.id);
+    if(error) throw error;
+    Object.assign(cur,upd);
+    const idx=data.findIndex(r=>r.id===cur.id);
+    if(idx>=0) Object.assign(data[idx],upd);
+    renderTeam(); renderBuero(); renderStats();
+    closeModal('m-detail');
+    toast('Gespeichert ✓','ok');
+  } catch(e){ toast('Fehler: '+e.message,'err'); }
+  finally{ btn.disabled=false; btn.textContent='💾 Speichern'; }
+}
+
+// ── Neuer Auftrag ──────────────────────────────────────────────────────────
+function openNew() {
+  ['n-auftrag','n-anschrift','n-beschreibung','n-auftraggeber','n-mieter','n-melder'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('n-datum').value=new Date().toISOString().split('T')[0];
+  document.getElementById('n-status').value='Offen';
+  document.getElementById('m-new').classList.add('open');
+}
+
+async function saveNew() {
+  const auftrag=document.getElementById('n-auftrag').value.trim();
+  if(!auftrag){toast('Bitte Auftragsnummer eingeben','err');return;}
+  const datum=document.getElementById('n-datum').value;
+  const datumFmt=datum?new Date(datum).toLocaleDateString('de-DE'):'';
+  const year=datum?new Date(datum).getFullYear():new Date().getFullYear();
+  const nextPos=(data.filter(r=>r.jahr==year).length)+1;
+  const row={
+    pos:nextPos, auftrag, datum:datumFmt, jahr:year,
+    anschrift:document.getElementById('n-anschrift').value.trim()||null,
+    beschreibung:document.getElementById('n-beschreibung').value.trim()||null,
+    auftraggeber:document.getElementById('n-auftraggeber').value.trim()||null,
+    mieter:document.getElementById('n-mieter').value.trim()||null,
+    melder:document.getElementById('n-melder').value.trim()||null,
+    status:document.getElementById('n-status').value,
+  };
+  const {data:ins,error}=await sb.from('auftraege').insert([row]).select();
+  if(error){toast('Fehler: '+error.message,'err');return;}
+  data.unshift(ins[0]);
+  renderBuero(); renderTeam(); renderStats();
+  closeModal('m-new');
+  toast('Auftrag angelegt ✓','ok');
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────
+function navigateTo(addr) {
+  const q = encodeURIComponent(addr);
+  // Popup mit Auswahl: Apple Karten oder Google Maps
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:16px 16px 0 0;width:100%;max-width:480px;padding:20px 16px 32px">
+      <div style="font-size:15px;font-weight:700;margin-bottom:16px;text-align:center">Navigation öffnen mit…</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button onclick="window.open('maps://maps.apple.com/?q=${q}','_blank');this.closest('[style]').remove()"
+          style="padding:14px;border-radius:10px;border:1.5px solid #e2e8f0;background:#fff;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:10px">
+          🍎 Apple Karten
+        </button>
+        <button onclick="window.open('https://maps.google.com/maps?q=${q}','_blank');this.closest('[style]').remove()"
+          style="padding:14px;border-radius:10px;border:1.5px solid #e2e8f0;background:#fff;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:10px">
+          🗺️ Google Maps
+        </button>
+        <button onclick="this.closest('[style]').remove()"
+          style="padding:12px;border-radius:10px;border:none;background:#f1f5f9;font-size:14px;cursor:pointer;color:#64748b;font-weight:600">
+          Abbrechen
+        </button>
+      </div>
+    </div>`;
+  overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function switchTab(t) {
+  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',(i===0)===(t==='buero')));
+  document.getElementById('buero-view').classList.toggle('active',t==='buero');
+  document.getElementById('team-view').classList.toggle('active',t==='team');
+}
+function closeModal(id){ document.getElementById(id).classList.remove('open'); cur=null; }
+function toast(msg,type=''){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.className='toast show'+(type?' '+type:'');
+  setTimeout(()=>el.className='toast',3000);
+}
+
+// Close on backdrop click
+document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{
+  if(e.target===o && o.id!=='m-leistung') o.classList.remove('open');
+  if(e.target===o && o.id==='m-leistung') closeLNModal();
+}));
+
+// ── Leistungsnachweis ────────────────────────────────────────────────────────
+const SATZ_GWH = 49.63;
+const SATZ_STD = 65.00;
+const KM_RATE  = 0.75;
+const ORIGIN   = 'Wickerer Straße 33A, 65439 Flörsheim am Main';
+
+let lnCur   = null;
+let lnIsGWH = false;
+
+function isGWHOrder(r){ return !!(r.auftraggeber && r.auftraggeber.toLowerCase().includes('gwh')); }
+
+function openLeistung(id){
+  if(!id) return;
+  lnCur = data.find(r=>r.id===id); if(!lnCur) return;
+  lnIsGWH = isGWHOrder(lnCur);
+
+  document.getElementById('ln-title').textContent = lnIsGWH ? '📋 GWH Stundenzettel' : '📋 Leistungsnachweis';
+  document.getElementById('ln-gwh-section').style.display = lnIsGWH ? 'block' : 'none';
+  document.getElementById('ln-gwh-sigs').style.display    = lnIsGWH ? 'block' : 'none';
+  document.getElementById('ln-gwh-pdf-btn').style.display = lnIsGWH ? 'block' : 'none';
+
+  document.getElementById('ln-order-info').innerHTML =
+    `<div class="info-item"><div class="lbl">Auftrag</div><div class="val">${lnCur.auftrag||'–'}</div></div>`+
+    `<div class="info-item"><div class="lbl">Datum</div><div class="val">${lnCur.datum||'–'}</div></div>`+
+    (lnCur.anschrift?`<div class="info-item full"><div class="lbl">Anschrift</div><div class="val">${lnCur.anschrift}</div></div>`:'')+
+    (lnCur.auftraggeber?`<div class="info-item full"><div class="lbl">Auftraggeber</div><div class="val">${lnCur.auftraggeber}</div></div>`:'')+
+    (lnCur.mieter?`<div class="info-item full"><div class="lbl">Mieter</div><div class="val">${lnCur.mieter}</div></div>`:'')+
+    (lnCur.beschreibung?`<div class="info-item full"><div class="lbl">Beschreibung</div><div class="val">${lnCur.beschreibung}</div></div>`:'');
+
+  const ln = lnCur.leistungsnachweis;
+  if(ln){ populateLN(ln); } else { resetLN(); }
+
+  renderFahrtSection();
+  initAllSigPads();
+
+  if(lnIsGWH && !ln?.km && lnCur.anschrift) setTimeout(()=>calcAndSetKm(), 400);
+
+  document.getElementById('m-leistung').classList.add('open');
+  updateVorschau();
+}
+
+function closeLNModal(){ document.getElementById('m-leistung').classList.remove('open'); }
+
+function resetLN(){
+  document.getElementById('ln-datum').value = new Date().toISOString().split('T')[0];
+  document.getElementById('ln-fallnummer') && (document.getElementById('ln-fallnummer').value='');
+  document.getElementById('ln-anzahl').value = 2;
+  document.getElementById('ln-ankunft').value = '';
+  document.getElementById('ln-abfahrt').value = '';
+  document.getElementById('ln-stunden').value = '';
+  document.getElementById('ln-stundensatz').value = lnIsGWH ? SATZ_GWH : SATZ_STD;
+  renderMARows();
+  document.getElementById('ln-leistungen-list').innerHTML=''; addLeistungRow();
+  document.getElementById('ln-nacharbeiten-list').innerHTML='';
+  document.getElementById('ln-material-list').innerHTML='';
+}
+
+function populateLN(ln){
+  document.getElementById('ln-datum').value = ln.datum||'';
+  if(document.getElementById('ln-fallnummer')) document.getElementById('ln-fallnummer').value = ln.fallnummer||'';
+  document.getElementById('ln-anzahl').value = ln.anzahl||2;
+  renderMARows();
+  const nameInputs = document.querySelectorAll('.ln-ma-name');
+  (ln.mitarbeiter||[]).forEach((n,i)=>{ if(nameInputs[i]) nameInputs[i].value=n; });
+  document.getElementById('ln-ankunft').value = ln.ankunft||'';
+  document.getElementById('ln-abfahrt').value = ln.abfahrt||'';
+  document.getElementById('ln-stunden').value = ln.stunden||'';
+  document.getElementById('ln-stundensatz').value = ln.stundensatz || (lnIsGWH ? SATZ_GWH : SATZ_STD);
+  document.getElementById('ln-leistungen-list').innerHTML='';
+  (ln.leistungen?.length ? ln.leistungen : ['']).forEach(v=>addLeistungRow(v));
+  document.getElementById('ln-nacharbeiten-list').innerHTML='';
+  (ln.nacharbeiten||[]).forEach(v=>addNacharbeitRow(v));
+  document.getElementById('ln-material-list').innerHTML='';
+  (ln.materialien||[]).forEach(m=>addMaterialRow(m.bez,m.det,m.menge,m.einheit,m.ep));
+  renderFahrtSection();
+  if(lnIsGWH && ln.km){ const el=document.getElementById('ln-km'); if(el) el.value=ln.km; }
+  else if(!lnIsGWH && ln.pauschale){ const el=document.getElementById('ln-pauschale'); if(el) el.value=ln.pauschale; }
+  if(ln.sigs){
+    if(ln.sigs.hw)    setTimeout(()=>drawSigFromData('ln-sig-hw',    ln.sigs.hw),    100);
+    if(ln.sigs.hw2)   setTimeout(()=>drawSigFromData('ln-sig-hw2',   ln.sigs.hw2),   100);
+    if(ln.sigs.mieter)setTimeout(()=>drawSigFromData('ln-sig-mieter',ln.sigs.mieter),100);
+  }
+  updateVorschau();
+}
+
+function renderMARows(){
+  const n = parseInt(document.getElementById('ln-anzahl').value)||1;
+  const old = [...document.querySelectorAll('.ln-ma-name')].map(i=>i.value);
+  let h='';
+  for(let i=0;i<n;i++) h+=`<div class="fg"><label>Handwerker ${i+1}</label><input type="text" class="ln-ma-name" placeholder="Vor- und Nachname" value="${old[i]||''}"></div>`;
+  document.getElementById('ln-ma-rows').innerHTML=h;
+}
+
+function calcStunden(){
+  const a=document.getElementById('ln-ankunft').value, b=document.getElementById('ln-abfahrt').value;
+  if(!a||!b) return;
+  const mins=(parseInt(b.split(':')[0])*60+parseInt(b.split(':')[1]))-(parseInt(a.split(':')[0])*60+parseInt(a.split(':')[1]));
+  if(mins<=0){document.getElementById('ln-stunden').value='';return;}
+  const h=mins/60;
+  document.getElementById('ln-stunden').value = h%1===0 ? h.toString() : h.toFixed(2).replace('.',',');
+  updateVorschau();
+}
+
+function addLeistungRow(val=''){
+  const d=document.createElement('div'); d.className='ln-row';
+  d.innerHTML=`<input type="text" class="ln-leistung-input" placeholder="Erbrachte Leistung…" value="${escAttr(val)}"><button class="ln-row-del" onclick="this.parentNode.remove()">×</button>`;
+  document.getElementById('ln-leistungen-list').appendChild(d);
+}
+function addNacharbeitRow(val=''){
+  const d=document.createElement('div'); d.className='ln-row';
+  d.innerHTML=`<input type="text" class="ln-nacharbeit-input" placeholder="Notwendige Nacharbeit…" value="${escAttr(val)}"><button class="ln-row-del" onclick="this.parentNode.remove()">×</button>`;
+  document.getElementById('ln-nacharbeiten-list').appendChild(d);
+}
+function addMaterialRow(bez='',det='',menge='',einheit='Stück',ep=''){
+  const d=document.createElement('div'); d.className='ln-mat-row';
+  const einheiten=['Stück','m','m²','kg','Liter','Pauschal'];
+  const opts=einheiten.map(e=>`<option${e===einheit?' selected':''}>${e}</option>`).join('');
+  d.innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+      <input type="text" class="ln-mat-bez" placeholder="Bezeichnung" value="${escAttr(bez)}">
+      <input type="text" class="ln-mat-det" placeholder="Detail (opt.)" value="${escAttr(det)}">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 32px;gap:6px;align-items:center">
+      <input type="number" class="ln-mat-menge" placeholder="Menge" value="${menge}" oninput="updateVorschau()">
+      <select class="ln-mat-einheit">${opts}</select>
+      <input type="number" class="ln-mat-ep" placeholder="EP €" step="0.01" value="${ep}" oninput="updateVorschau()">
+      <button class="ln-row-del" onclick="this.closest('.ln-mat-row').remove();updateVorschau()">×</button>
+    </div>
+    <div class="ln-mat-gesamt" style="text-align:right;font-size:11px;color:var(--muted);margin-top:3px"></div>`;
+  document.getElementById('ln-material-list').appendChild(d);
+  updateVorschau();
+}
+
+function renderFahrtSection(){
+  const s=document.getElementById('ln-fahrt-section');
+  if(lnIsGWH){
+    s.innerHTML=`<div class="fg"><label>Einfache Strecke km (OSRM)</label>
+      <div style="display:flex;gap:8px"><input type="number" id="ln-km" step="0.1" placeholder="km" style="flex:1" oninput="updateVorschau()">
+      <button class="btn btn-secondary" style="padding:10px 12px;white-space:nowrap;font-size:12px" onclick="calcAndSetKm()">📍 Berechnen</button></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">Gesamt: <b id="ln-km-total">–</b> km × 0,75 € = <b id="ln-km-betrag">–</b></div></div>`;
+  } else {
+    s.innerHTML=`<div class="fg"><label>An-/Abfahrt Pauschale (€)</label>
+      <input type="number" id="ln-pauschale" step="0.01" placeholder="z.B. 15,00" oninput="updateVorschau()"></div>`;
+  }
+}
+
+async function calcAndSetKm(){
+  if(!lnCur?.anschrift){ toast('Keine Adresse vorhanden','err'); return; }
+  const lines = lnCur.anschrift.split('\n').filter(l=>l.trim());
+  const dest  = lines.slice(0,2).join(', ');
+  toast('Berechne Entfernung…');
+  try {
+    const km = await routeKm(dest);
+    if(km){
+      document.getElementById('ln-km').value = km.toFixed(1);
+      updateVorschau();
+      toast(`${km.toFixed(1)} km ✓`,'ok');
+    } else { toast('Nicht berechenbar – bitte manuell eingeben','err'); }
+  } catch(e){ toast('Fehler: '+e.message,'err'); }
+}
+
+async function geocode(addr){
+  const r=await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addr)}&format=json&limit=1&countrycodes=de`,{headers:{'User-Agent':'ServiceTeam-MA/1.0'}});
+  const d=await r.json(); return d.length?{lat:parseFloat(d[0].lat),lon:parseFloat(d[0].lon)}:null;
+}
+async function routeKm(dest){
+  const [o,d]=await Promise.all([geocode(ORIGIN),geocode(dest)]);
+  if(!o||!d) return null;
+  const r=await fetch(`https://router.project-osrm.org/route/v1/driving/${o.lon},${o.lat};${d.lon},${d.lat}?overview=false`);
+  const j=await r.json();
+  return j.routes?.[0]?.distance/1000||null;
+}
+
+function updateVorschau(){
+  if(lnIsGWH){
+    const km=parseFloat(document.getElementById('ln-km')?.value)||0;
+    const tot=km*2, bet=tot*KM_RATE;
+    const elT=document.getElementById('ln-km-total'), elB=document.getElementById('ln-km-betrag');
+    if(elT) elT.textContent=fmt(tot)+' km';
+    if(elB) elB.textContent=fmtE(bet);
+  }
+  document.querySelectorAll('.ln-mat-row').forEach(row=>{
+    const m=parseFloat(row.querySelector('.ln-mat-menge')?.value)||0;
+    const e=parseFloat(row.querySelector('.ln-mat-ep')?.value)||0;
+    const el=row.querySelector('.ln-mat-gesamt');
+    if(el) el.textContent=m&&e?`Gesamt: ${fmtE(m*e)}`:'';
+  });
+  const std  = parseFloat((document.getElementById('ln-stunden')?.value||'0').replace(',','.'))||0;
+  const anz  = parseInt(document.getElementById('ln-anzahl')?.value)||1;
+  const satz = parseFloat(document.getElementById('ln-stundensatz')?.value)||(lnIsGWH?SATZ_GWH:SATZ_STD);
+  const personal = std*anz*satz;
+  let fahrt=0;
+  if(lnIsGWH){ const km=parseFloat(document.getElementById('ln-km')?.value)||0; fahrt=km*2*KM_RATE; }
+  else { fahrt=parseFloat(document.getElementById('ln-pauschale')?.value)||0; }
+  let material=0;
+  document.querySelectorAll('.ln-mat-row').forEach(r=>{ material+=(parseFloat(r.querySelector('.ln-mat-menge')?.value)||0)*(parseFloat(r.querySelector('.ln-mat-ep')?.value)||0); });
+  const netto=personal+fahrt+material, mwst=netto*0.19, brutto=netto+mwst;
+  document.getElementById('lnp-personal').textContent=fmtE(personal);
+  document.getElementById('lnp-fahrt').textContent   =fmtE(fahrt);
+  document.getElementById('lnp-material').textContent=fmtE(material);
+  document.getElementById('lnp-netto').textContent   =fmtE(netto);
+  document.getElementById('lnp-mwst').textContent    =fmtE(mwst);
+  document.getElementById('lnp-brutto').textContent  =fmtE(brutto);
+}
+
+function collectLN(){
+  return {
+    datum:      document.getElementById('ln-datum').value,
+    fallnummer: document.getElementById('ln-fallnummer')?.value||'',
+    anzahl:     parseInt(document.getElementById('ln-anzahl').value)||1,
+    mitarbeiter:[...document.querySelectorAll('.ln-ma-name')].map(i=>i.value),
+    ankunft:    document.getElementById('ln-ankunft').value,
+    abfahrt:    document.getElementById('ln-abfahrt').value,
+    stunden:    document.getElementById('ln-stunden').value,
+    stundensatz:parseFloat(document.getElementById('ln-stundensatz').value)||(lnIsGWH?SATZ_GWH:SATZ_STD),
+    leistungen: [...document.querySelectorAll('.ln-leistung-input')].map(i=>i.value).filter(v=>v.trim()),
+    nacharbeiten:[...document.querySelectorAll('.ln-nacharbeit-input')].map(i=>i.value).filter(v=>v.trim()),
+    materialien:[...document.querySelectorAll('.ln-mat-row')].map(r=>({
+      bez:r.querySelector('.ln-mat-bez').value,
+      det:r.querySelector('.ln-mat-det').value,
+      menge:parseFloat(r.querySelector('.ln-mat-menge').value)||0,
+      einheit:r.querySelector('.ln-mat-einheit').value,
+      ep:parseFloat(r.querySelector('.ln-mat-ep').value)||0,
+    })).filter(m=>m.bez),
+    km:      lnIsGWH?(parseFloat(document.getElementById('ln-km')?.value)||0):null,
+    pauschale:!lnIsGWH?(parseFloat(document.getElementById('ln-pauschale')?.value)||0):null,
+    sigs:{
+      hw:     getSigData('ln-sig-hw'),
+      hw2:    lnIsGWH?getSigData('ln-sig-hw2'):null,
+      mieter: lnIsGWH?getSigData('ln-sig-mieter'):null,
+    },
+    isGWH:   lnIsGWH,
+    savedAt: new Date().toISOString(),
+  };
+}
+
+async function saveLeistung(){
+  if(!lnCur) return;
+  const ln=collectLN();
+  const upd={leistungsnachweis:ln, status:'Arbeit durchgeführt', updated_at:new Date().toISOString()};
+  const {error}=await sb.from('auftraege').update(upd).eq('id',lnCur.id);
+  if(error){toast('Fehler: '+error.message,'err');return;}
+  Object.assign(lnCur,upd);
+  const idx=data.findIndex(r=>r.id===lnCur.id);
+  if(idx>=0) Object.assign(data[idx],upd);
+  renderTeam(); renderBuero(); renderStats();
+  toast('Leistungsnachweis gespeichert ✓','ok');
+}
+
+// ── Signature Pad ─────────────────────────────────────────────────────────────
+function initAllSigPads(){
+  ['ln-sig-hw','ln-sig-hw2','ln-sig-mieter'].forEach(id=>initSigPad(id));
+}
+function initSigPad(id){
+  const canvas=document.getElementById(id); if(!canvas) return;
+  const ctx=canvas.getContext('2d');
+  ctx.strokeStyle='#1e293b'; ctx.lineWidth=2.2; ctx.lineCap='round'; ctx.lineJoin='round';
+  let drawing=false;
+  function pos(e){ const r=canvas.getBoundingClientRect(), sx=canvas.width/r.width, sy=canvas.height/r.height, s=e.touches?e.touches[0]:e; return{x:(s.clientX-r.left)*sx,y:(s.clientY-r.top)*sy}; }
+  canvas.onmousedown=e=>{drawing=true;const p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y)};
+  canvas.onmousemove=e=>{if(!drawing)return;const p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke()};
+  canvas.onmouseup=canvas.onmouseleave=()=>drawing=false;
+  canvas.addEventListener('touchstart',e=>{e.preventDefault();drawing=true;const p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y)},{passive:false});
+  canvas.addEventListener('touchmove', e=>{e.preventDefault();if(!drawing)return;const p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke()},{passive:false});
+  canvas.addEventListener('touchend',()=>drawing=false,{passive:false});
+}
+function clearSig(id){ const c=document.getElementById(id); if(c) c.getContext('2d').clearRect(0,0,c.width,c.height); }
+function getSigData(id){ const c=document.getElementById(id); if(!c) return null; const d=c.getContext('2d').getImageData(0,0,c.width,c.height); return d.data.some(v=>v!==0)?c.toDataURL():null; }
+function drawSigFromData(id,url){ const c=document.getElementById(id); if(!c||!url) return; const img=new Image(); img.onload=()=>c.getContext('2d').drawImage(img,0,0); img.src=url; }
+
+// ── PDF Generation ────────────────────────────────────────────────────────────
+function genLNPDF(type){
+  const ln=collectLN();
+  if(!window.jspdf){ toast('PDF-Bibliothek lädt noch…','err'); return; }
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({unit:'mm',format:'a4'});
+  type==='gwh' ? pdfGWH(doc,ln) : pdfEigen(doc,ln);
+  const name=(type==='gwh'?'GWH_Stundenzettel':'Leistungsnachweis')+'_'+(lnCur.auftrag||'')+'_'+(ln.datum||'')+'.pdf';
+  doc.save(name.replace(/[^a-zA-Z0-9._-]/g,'_'));
+}
+
+// PDF-Generierung aus dem Büro-Detail-Modal (verwendet cur statt lnCur/collectLN)
+function genBueroPDF(returnBlob = false) {
+  if (!cur) return null;
+  if (!window.jspdf) { toast('PDF-Bibliothek lädt noch…','err'); return null; }
+  lnCur = cur;
+  lnIsGWH = isGWHOrder(cur);
+  const ln = cur.leistungsnachweis || {};
+  const {jsPDF} = window.jspdf;
+  const doc = new jsPDF({unit:'mm', format:'a4'});
+  lnIsGWH ? pdfGWH(doc, ln) : pdfEigen(doc, ln);
+  if (returnBlob) return doc.output('blob');
+  const name = 'Leistungsnachweis_'+(cur.auftrag||'Auftrag').replace(/[^\w-]/g,'_')+'.pdf';
+  doc.save(name);
+}
+
+function pdfGWH(doc,ln){
+  const W=210,M=15,CW=180; let y=15;
+  doc.setFontSize(12);doc.setFont(undefined,'bold');
+  doc.text('Stundenzettel/Leistungsnachweis',M,y);y+=8;
+  doc.setFontSize(9);
+  [['Fallnummer',ln.fallnummer||'–'],['Auftragsnummer',lnCur.auftrag||'–'],['Gewerk','Elektriker']].forEach(([k,v],i)=>{
+    doc.setFont(undefined,'bold');doc.text(k,M,y+i*5);
+    doc.setFont(undefined,'normal');doc.text(v,M+35,y+i*5);
+  });
+  doc.setFont(undefined,'bold');doc.text('Erstellungsdatum',W/2+5,y);
+  doc.setFont(undefined,'normal');doc.text(fmtDate(ln.datum),W-M,y,{align:'right'});
+  doc.setFont(undefined,'bold');doc.text('Auftragskategorie',W/2+5,y+5);
+  doc.setFont(undefined,'normal');doc.text('Wohnungsinstandsetzung',W-M,y+5,{align:'right'});
+  y+=22;
+  doc.setDrawColor(180);doc.line(M,y,W-M,y);y+=5;
+  const halfW=CW/2-3;
+  const ag=(lnCur.auftraggeber||'GWH Wohnungsgesellschaft mbH Hessen\nWesterbachstraße 33\n60489 Frankfurt am Main\n+49 561 93772473').split('\n');
+  const an=['Service Team MA GmbH','Wickerer Str. 33A','65439 Flörsheim am Main','Tel.: 015566363222'];
+  doc.setFont(undefined,'bold');doc.text('Auftraggeber',M,y);doc.text('Auftragnehmer',M+halfW+6,y);y+=5;
+  doc.setFont(undefined,'normal');
+  ag.forEach((l,i)=>doc.text(l,M,y+i*4.5));
+  an.forEach((l,i)=>doc.text(l,M+halfW+6,y+i*4.5));
+  y+=Math.max(ag.length,an.length)*4.5+5;
+  const ao=(lnCur.anschrift||'–').split('\n').slice(0,4);
+  const mi=(lnCur.mieter||'k.A.').split('\n').slice(0,4);
+  doc.setFont(undefined,'bold');doc.text('Auftragsort',M,y);doc.text('Mieter',M+halfW+6,y);y+=5;
+  doc.setFont(undefined,'normal');
+  ao.forEach((l,i)=>doc.text(l,M,y+i*4.5));
+  mi.forEach((l,i)=>doc.text(l,M+halfW+6,y+i*4.5));
+  y+=Math.max(ao.length,mi.length)*4.5+5;
+  doc.setFont(undefined,'bold');doc.text('Informationen zum Fall',M,y);doc.setFont(undefined,'normal');y+=5;
+  const info=doc.splitTextToSize(lnCur.beschreibung||'',CW);
+  doc.text(info,M,y);y+=info.length*4.5+5;
+  doc.autoTable({startY:y,
+    head:[['Datum','Handwerker','Ankunft','Abfahrt','Stunden']],
+    body:(ln.mitarbeiter||['']).map(n=>[fmtDate(ln.datum),n||'–',ln.ankunft||'–',ln.abfahrt||'–',ln.stunden||'–']),
+    styles:{fontSize:9,cellPadding:3},headStyles:{fillColor:[240,240,240],textColor:[0,0,0],fontStyle:'bold'},
+    columnStyles:{0:{cellWidth:28},2:{cellWidth:22},3:{cellWidth:22},4:{cellWidth:22}},margin:{left:M,right:M}});
+  y=doc.lastAutoTable.finalY+5;
+  const lb=(ln.leistungen||[]).map((l,i)=>[String(i+1),l]).filter(r=>r[1]);
+  if(!lb.length) lb.push(['1','–']);
+  doc.autoTable({startY:y,head:[['Pos.','Erbrachte Leistungen']],body:lb,
+    styles:{fontSize:9,cellPadding:3},headStyles:{fillColor:[240,240,240],textColor:[0,0,0],fontStyle:'bold'},
+    columnStyles:{0:{cellWidth:12}},margin:{left:M,right:M}});
+  y=doc.lastAutoTable.finalY+5;
+  const nb=(ln.nacharbeiten||[]).map((n,i)=>[String(i+1),n]).filter(r=>r[1]);
+  if(!nb.length) nb.push(['1','–']);
+  doc.autoTable({startY:y,head:[['Pos.','Notwendige Nacharbeiten']],body:nb,
+    styles:{fontSize:9,cellPadding:3},headStyles:{fillColor:[240,240,240],textColor:[0,0,0],fontStyle:'bold'},
+    columnStyles:{0:{cellWidth:12}},margin:{left:M,right:M}});
+  y=doc.lastAutoTable.finalY+10;
+  if(y>242){doc.addPage();y=20;}
+  const bW=CW/4-1;
+  ['Datum / Unterschrift','Handwerker','Hauswart','Mieter'].forEach((lbl,i)=>{
+    const bx=M+i*(bW+1);
+    doc.setDrawColor(160);doc.rect(bx,y,bW,28);
+    const sigId=['','ln-sig-hw','ln-sig-hw2','ln-sig-mieter'][i];
+    if(sigId){const sd=getSigData(sigId);if(sd){try{doc.addImage(sd,'PNG',bx+1,y+1,bW-2,26);}catch(e){}}}
+    doc.setFontSize(7.5);doc.setFont(undefined,'bold');doc.text(lbl,bx+bW/2,y+31,{align:'center'});
+  });
+  const pH=297;
+  doc.setFontSize(7);doc.setFont(undefined,'normal');doc.setTextColor(120);
+  doc.text(ln.fallnummer||lnCur.auftrag||'',M,pH-8);
+  doc.text('Erstellungsdatum: '+fmtDate(new Date().toISOString().split('T')[0]),W/2,pH-8,{align:'center'});
+  doc.text('1/1',W-M,pH-8,{align:'right'});doc.setTextColor(0);
+}
+
+function pdfEigen(doc,ln){
+  const W=210,M=15,CW=180; let y=18;
+  doc.setFontSize(9);doc.setFont(undefined,'normal');
+  ['ServiceTeam MA GmbH','Wickerer Straße 33A','65439 Flörsheim','Tel.: 015566363222','info@serviceteam1.de','www.serviceteam1.de']
+    .forEach((l,i)=>doc.text(l,W-M,y+i*4.5,{align:'right'}));
+  doc.setFontSize(15);doc.setFont(undefined,'bold');doc.text('SERVICE TEAM',M,y+3);
+  doc.setFontSize(8);doc.setFont(undefined,'normal');doc.text('GMBH',M,y+8);
+  y+=34;
+  doc.setFontSize(7.5);doc.setFont(undefined,'normal');
+  doc.text('ServiceTeam MA GmbH, Wickerer Straße 33A, 65439 Flörsheim',M,y-2);
+  (lnCur.auftraggeber||'–').split('\n').forEach((l,i)=>{doc.setFontSize(9);doc.text(l,M,y+i*5);});
+  const agLines=(lnCur.auftraggeber||'').split('\n').length;
+  const iData=[['Leistungsnachweis Nr.:','–'],['Kundennr.:','–'],['Datum:',fmtDate(new Date().toISOString().split('T')[0])],['Leistungsdatum:',fmtDate(ln.datum)]];
+  iData.forEach(([k,v],i)=>{
+    doc.setFontSize(9);doc.setFont(undefined,'bold');doc.text(k,W-M-38,y+i*5);
+    doc.setFont(undefined,'normal');doc.text(v,W-M,y+i*5,{align:'right'});
+  });
+  y+=agLines*5+14;
+  doc.setFontSize(13);doc.setFont(undefined,'bold');doc.text('Leistungsnachweis',M,y);y+=8;
+  doc.setFontSize(9);doc.setFont(undefined,'normal');
+  const desc=[];
+  if(lnCur.anschrift) desc.push('Objekt: '+lnCur.anschrift.replace(/\n/g,', '));
+  if(lnCur.mieter) desc.push(lnCur.mieter.split('\n')[0]);
+  if(ln.leistungen?.length) desc.push(ln.leistungen.join(' / '));
+  desc.forEach(l=>{const w=doc.splitTextToSize(l,CW);doc.text(w,M,y);y+=w.length*4.5;});
+  y+=4;
+  const std=parseFloat((ln.stunden||'0').replace(',','.'))||0;
+  const satz=ln.stundensatz||SATZ_GWH;
+  const rows=[];let pos=1;
+  (ln.mitarbeiter||['']).forEach(n=>{
+    rows.push([String(pos++),n?`Arbeitszeit für 1 Monteur\n${n}`:'Arbeitszeit für 1 Monteur',fmt(std),'Stunde',fmtE(satz),fmtE(std*satz)]);
+  });
+  if(ln.isGWH&&ln.km){
+    const kmT=ln.km*2, b=kmT*KM_RATE, city=extractCity(lnCur.anschrift||'');
+    rows.push([String(pos++),`An- und Abfahrt${city?' nach '+city:''}\nFlörsheim-${city||'Zielort'}-Flörsheim\n${ln.km}km: 0,75€ × ${ln.km}km × 2`,fmt(kmT),'km','0,75',fmtE(b)]);
+  } else if(!ln.isGWH&&ln.pauschale){
+    rows.push([String(pos++),'An- und Abfahrt Pauschale','1','Pauschal',fmtE(ln.pauschale),fmtE(ln.pauschale)]);
+  }
+  (ln.materialien||[]).forEach(m=>{
+    rows.push([String(pos++),m.det?`${m.bez}\n${m.det}`:m.bez,fmt(m.menge),m.einheit,fmtE(m.ep),fmtE(m.menge*m.ep)]);
+  });
+  doc.autoTable({startY:y,
+    head:[['Pos.','Bezeichnung','Menge','Einheit','Einzel €','Gesamt €']],
+    body:rows,
+    styles:{fontSize:9,cellPadding:3},
+    headStyles:{fillColor:[255,255,255],textColor:[0,0,0],fontStyle:'bold',lineWidth:0.3,lineColor:[200,200,200]},
+    columnStyles:{0:{cellWidth:10},2:{cellWidth:14,halign:'right'},3:{cellWidth:16},4:{cellWidth:19,halign:'right'},5:{cellWidth:19,halign:'right'}},
+    margin:{left:M,right:M}});
+  y=doc.lastAutoTable.finalY+5;
+  const netto=rows.reduce((s,r)=>s+parseMny(r[5]),0), mwst=netto*0.19, brutto=netto+mwst;
+  const tx=W-M-52;
+  [['Zwischensumme (netto)',fmtE(netto)],['Umsatzsteuer 19 %',fmtE(mwst)]].forEach(([k,v])=>{
+    doc.setFontSize(9);doc.setFont(undefined,'normal');doc.text(k,tx,y);doc.text(v,W-M,y,{align:'right'});y+=5;
+  });
+  doc.setFont(undefined,'bold');doc.text('Gesamtbetrag',tx,y);doc.text(fmtE(brutto),W-M,y,{align:'right'});y+=12;
+  doc.setFont(undefined,'normal');doc.setFontSize(9);
+  doc.text('Zahlung innerhalb 14 Tage nach Rechnungseingang ohne Abzug.',M,y);y+=5;
+  doc.text('Vielen Dank für die gute Zusammenarbeit.',M,y);y+=12;
+  const sd=getSigData('ln-sig-hw');
+  if(sd){try{doc.addImage(sd,'PNG',M,y,50,22);}catch(e){}}
+  doc.setDrawColor(160);doc.line(M,y+24,M+52,y+24);
+  doc.setFontSize(8);doc.text('Unterschrift Handwerker',M,y+28);
+  const pH=297;
+  doc.setFontSize(7.5);doc.setFont(undefined,'normal');doc.setTextColor(80);
+  doc.text('ServiceTeam MA GmbH | Wickerer Str. 33A | 65439 Flörsheim | Tel.: 015566363222 | info@serviceteam1.de',W/2,pH-12,{align:'center'});
+  doc.text('USt-IdNr.: DE366096497 | Steuernummer: 04024317361',W/2,pH-8,{align:'center'});
+  doc.text('IBAN: DE27 5019 0000 6000 1689 96 | BIC: FFVBDEFFXXX | Frankfurter Volksbank Rhein-Main',W/2,pH-4,{align:'center'});
+  doc.setTextColor(0);
+}
+
+// ── Büro: LN-Sektion ──────────────────────────────────────────────────────────
+function renderBDLNSection(r){
+  const el=document.getElementById('bd-ln-section'); if(!el) return;
+  el.innerHTML='';
+}
+
+function dlPDF(type){
+  if(!cur) return;
+  lnCur=cur; lnIsGWH=isGWHOrder(cur);
+  const ln=cur.leistungsnachweis; if(!ln) return;
+  if(!window.jspdf){toast('PDF-Bibliothek lädt…','err');return;}
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({unit:'mm',format:'a4'});
+  type==='gwh'?pdfGWH(doc,ln):pdfEigen(doc,ln);
+  const name=(type==='gwh'?'GWH_Stundenzettel':'Leistungsnachweis')+'_'+(cur.auftrag||'')+'_'+(ln.datum||'')+'.pdf';
+  doc.save(name.replace(/[^a-zA-Z0-9._-]/g,'_'));
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function fmtDate(d){ if(!d) return '–'; const [y,m,day]=d.split('-'); return `${day}.${m}.${y}`; }
+function fmt(n){ if(n==null||isNaN(n)) return '–'; return Number(n).toString().replace('.',','); }
+function fmtE(n){ if(n==null||isNaN(n)) return '–'; return Number(n).toFixed(2).replace('.',','); }
+function parseMny(s){ if(!s||s==='–') return 0; return parseFloat(s.replace(',','.'))||0; }
+function escAttr(s){ return (s||'').replace(/"/g,'&quot;'); }
+function extractCity(addr){ const m=addr.match(/\d{5}\s+(\S+)/); return m?m[1]:''; }
+
+// ── Word Leistungsnachweis ────────────────────────────────────────────────
+function fillContentControl(xml, tag, value) {
+  const tagStr = 'w:tag w:val="' + tag + '"';
+  const tagIdx = xml.indexOf(tagStr);
+  if (tagIdx === -1) return xml;
+  const sdtStart = xml.lastIndexOf('<w:sdt>', tagIdx);
+  const sdtEnd   = xml.indexOf('</w:sdt>', tagIdx) + '</w:sdt>'.length;
+  let sdt = xml.substring(sdtStart, sdtEnd);
+  sdt = sdt.replace('<w:showingPlcHdr/>', '');
+  sdt = sdt.replace(/<w:rStyle\s+w:val="Platzhaltertext"\s*\/>/g, '');
+  let first = false;
+  sdt = sdt.replace(/<w:sdtContent>([\s\S]*?)<\/w:sdtContent>/, (_, inner) => {
+    const filled = inner.replace(/<w:t(?:\s[^>]*)?>[\s\S]*?<\/w:t>/g, () => {
+      if (!first) { first = true; return '<w:t>' + escXmlW(value) + '</w:t>'; }
+      return '';
+    });
+    return '<w:sdtContent>' + filled + '</w:sdtContent>';
+  });
+  return xml.substring(0, sdtStart) + sdt + xml.substring(sdtEnd);
+}
+
+function fillSigControl(xml, rels, tag, dataUrl, rId, imgId) {
+  if (!dataUrl) return { xml, rels };
+  const tagStr = 'w:tag w:val="' + tag + '"';
+  const tagIdx = xml.indexOf(tagStr);
+  if (tagIdx === -1) return { xml, rels };
+  const sdtStart = xml.lastIndexOf('<w:sdt>', tagIdx);
+  const sdtEnd   = xml.indexOf('</w:sdt>', tagIdx) + '</w:sdt>'.length;
+  const ns_wp  = 'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"';
+  const ns_a   = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"';
+  const ns_pic = 'xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"';
+  const ns_r   = 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+  const drawing =
+    '<w:sdt><w:sdtPr><w:tag w:val="' + tag + '"/></w:sdtPr><w:sdtContent><w:r><w:drawing>' +
+    '<wp:inline distT="0" distB="0" distL="0" distR="0" ' + ns_wp + '>' +
+    '<wp:extent cx="1828800" cy="685800"/><wp:effectExtent l="0" t="0" r="0" b="0"/>' +
+    '<wp:docPr id="' + imgId + '" name="' + tag + '"/>' +
+    '<wp:cNvGraphicFramePr><a:graphicFrameLocks ' + ns_a + ' noChangeAspect="1"/></wp:cNvGraphicFramePr>' +
+    '<a:graphic ' + ns_a + '><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+    '<pic:pic ' + ns_pic + '>' +
+    '<pic:nvPicPr><pic:cNvPr id="' + imgId + '" name="' + tag + '"/><pic:cNvPicPr/></pic:nvPicPr>' +
+    '<pic:blipFill><a:blip r:embed="' + rId + '" ' + ns_r + '/>' +
+    '<a:stretch><a:fillRect/></a:stretch></pic:blipFill>' +
+    '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1828800" cy="685800"/></a:xfrm>' +
+    '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>' +
+    '</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:sdtContent></w:sdt>';
+  const newRels = rels.replace('</Relationships>',
+    '  <Relationship Id="' + rId + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/' + rId + '.png"/>\n</Relationships>');
+  return { xml: xml.substring(0, sdtStart) + drawing + xml.substring(sdtEnd), rels: newRels };
+}
+
+function escXmlW(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function appendPhotosToWord(zip, docXml, relsXml, photoUrls) {
+  const maxW = 5760000, maxH = 8208000; // 160mm × 228mm in EMU
+  let pageXml = '';
+  for (let i = 0; i < photoUrls.length; i++) {
+    try {
+      const resp = await fetch(photoUrls[i]);
+      if (!resp.ok) continue;
+      const blob = await resp.blob();
+      const ab = await blob.arrayBuffer();
+      const uint8 = new Uint8Array(ab);
+      const dims = await new Promise(res => {
+        const img = new Image(), u = URL.createObjectURL(blob);
+        img.onload = () => { res({w: img.naturalWidth, h: img.naturalHeight}); URL.revokeObjectURL(u); };
+        img.onerror = () => res({w: 1600, h: 1200});
+        img.src = u;
+      });
+      const ratio = dims.w / dims.h;
+      let cx, cy;
+      if (ratio > maxW / maxH) { cx = maxW; cy = Math.round(maxW / ratio); }
+      else { cy = maxH; cx = Math.round(maxH * ratio); }
+      const ext = blob.type.includes('png') ? 'png' : 'jpg';
+      const mediaName = `foto_${i+1}.${ext}`;
+      const rId = `rIdFoto${i+1}`;
+      const imgId = 900 + i;
+      zip.file(`word/media/${mediaName}`, uint8);
+      relsXml = relsXml.replace('</Relationships>',
+        `  <Relationship Id="${rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${mediaName}"/>\n</Relationships>`);
+      const ns_wp = 'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"';
+      const ns_a  = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"';
+      const ns_pic= 'xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"';
+      const ns_r  = 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+      pageXml +=
+        `<w:p><w:r><w:br w:type="page"/></w:r></w:p>` +
+        `<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:drawing>` +
+        `<wp:inline distT="0" distB="0" distL="0" distR="0" ${ns_wp}>` +
+        `<wp:extent cx="${cx}" cy="${cy}"/>` +
+        `<wp:effectExtent l="0" t="0" r="0" b="0"/>` +
+        `<wp:docPr id="${imgId}" name="Foto ${i+1}"/>` +
+        `<wp:cNvGraphicFramePr><a:graphicFrameLocks ${ns_a} noChangeAspect="1"/></wp:cNvGraphicFramePr>` +
+        `<a:graphic ${ns_a}><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
+        `<pic:pic ${ns_pic}><pic:nvPicPr><pic:cNvPr id="${imgId}" name="Foto ${i+1}"/><pic:cNvPicPr/></pic:nvPicPr>` +
+        `<pic:blipFill><a:blip r:embed="${rId}" ${ns_r}/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
+        `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>` +
+        `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>` +
+        `</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`;
+    } catch(e) { /* Foto überspringen */ }
+  }
+  return { docXml: docXml.replace('</w:body>', pageXml + '</w:body>'), relsXml };
+}
+
+async function genWordLeistungsnachweis(returnBlob = false) {
+  if (!cur) return;
+  let ez = {};
+  try { const p=JSON.parse(cur.mitarbeiter_bericht||'{}'); if(p&&typeof p==='object') ez=p; } catch(e){}
+  if (!window.PizZip) { toast('Bitte kurz warten und nochmals versuchen','err'); return; }
+  const tmpl = typeof LN_TEMPLATE2_B64 !== 'undefined' ? LN_TEMPLATE2_B64 : (typeof LN_TEMPLATE_B64 !== 'undefined' ? LN_TEMPLATE_B64 : null);
+  if (!tmpl) { toast('Vorlage nicht geladen','err'); return; }
+  toast('Word-Dokument wird erstellt…');
+  try {
+    const bin   = atob(tmpl);
+    const bytes = new Uint8Array(bin.length);
+    for (let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+    const zip   = new PizZip(bytes.buffer);
+    const dec   = new TextDecoder('utf-8');
+    let docXml  = dec.decode(zip.file('word/document.xml').asArrayBuffer());
+    let relsXml = dec.decode(zip.file('word/_rels/document.xml.rels').asArrayBuffer());
+
+    const rawAddr = cur.anschrift || '';
+    let strasseHnr, plzOrt;
+    if (rawAddr.includes(' / ')) {
+      const parts = rawAddr.split(' / ');
+      strasseHnr = parts[0].trim();
+      plzOrt = parts.slice(1).join(' / ').trim();
+    } else {
+      const lines = rawAddr.split('\n');
+      strasseHnr = lines[0] || '';
+      plzOrt = lines[1] || '';
+    }
+    const ortM = plzOrt.match(/\d{5}\s+(.+)/);
+    const ort  = ortM ? ortM[1].trim() : plzOrt.trim();
+    const fmtD = d => {
+      if (!d) return '';
+      const dt = new Date(d + 'T12:00:00');
+      return String(dt.getDate()).padStart(2,'0')+'.'+String(dt.getMonth()+1).padStart(2,'0')+'.'+dt.getFullYear();
+    };
+    const dt = new Date();
+    const today = String(dt.getDate()).padStart(2,'0')+'.'+String(dt.getMonth()+1).padStart(2,'0')+'.'+dt.getFullYear();
+
+    const fields = {
+      'Mieter':                             (cur.mieter||'').split('\n')[0],
+      'Anschrift Straße und Hausnummer':    strasseHnr,
+      'Anschrift PLZ und Ort':              plzOrt,
+      'Auftrag':                            cur.auftrag||'',
+      'Beschreibung':                       cur.beschreibung||'',
+      'Leistungsdatum':                     fmtD(ez.leistungsdatum),
+      'Anzahl Handwerker':                  String(ez.anzahl||1),
+      'Arbeitszeit Handwerker':             ez.stundenInfo||'',
+      'Tätigkeit':                     ez.taetigkeit||'',
+      'Ort, Datum':                         ort+', '+today,
+    };
+    const mat = ez.material||[];
+    for (let i=0;i<4;i++) {
+      fields[i===2 ? 'Bezeichnung 3 ' : 'Bezeichnung '+(i+1)] = mat[i]?.bez||'';
+      fields['Menge '+(i+1)] = mat[i]?.menge||'';
+    }
+    const raStore = getRAs();
+    const agLine = (cur.auftraggeber||'').split('\n')[0].trim().toLowerCase();
+    const raMatch = Object.values(raStore).find(ra =>
+      agLine.includes(ra.key.toLowerCase()) || ra.key.toLowerCase().includes(agLine)
+    );
+    if (raMatch) {
+      fields['Auftraggeber']                      = raMatch.name;
+      fields['Auftraggeber Straße und Hausnummer'] = raMatch.strasse;
+      fields['Auftraggeber PLZ und Ort']           = raMatch.plzOrt;
+    }
+    for (const [tag,val] of Object.entries(fields)) docXml = fillContentControl(docXml,tag,val);
+
+    if (ez.sigs?.hw) {
+      const r=fillSigControl(docXml,relsXml,'Unterschrift Hauswart',ez.sigs.hw,'rId8',801);
+      docXml=r.xml; relsXml=r.rels;
+      zip.file('word/media/rId8.png', Uint8Array.from(atob(ez.sigs.hw.split(',')[1]),c=>c.charCodeAt(0)));
+    } else {
+      docXml = fillContentControl(docXml, 'Unterschrift Hauswart', ' ');
+    }
+    if (ez.sigs?.mieter) {
+      const r=fillSigControl(docXml,relsXml,'Unterschrift Mieter',ez.sigs.mieter,'rId9',802);
+      docXml=r.xml; relsXml=r.rels;
+      zip.file('word/media/rId9.png', Uint8Array.from(atob(ez.sigs.mieter.split(',')[1]),c=>c.charCodeAt(0)));
+    } else {
+      docXml = fillContentControl(docXml, 'Unterschrift Mieter', ' ');
+    }
+    if (cur.bilder && cur.bilder.length) {
+      const res = await appendPhotosToWord(zip, docXml, relsXml, cur.bilder);
+      docXml = res.docXml; relsXml = res.relsXml;
+    }
+    const enc = new TextEncoder();
+    zip.file('word/document.xml', enc.encode(docXml));
+    zip.file('word/_rels/document.xml.rels', enc.encode(relsXml));
+
+    const blob = zip.generate({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+    if (returnBlob) return blob;
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href=url;
+    a.download='Leistungsnachweis_'+(cur.auftrag||'Auftrag').replace(/[^\w-]/g,'_')+'.docx';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('Word heruntergeladen ✓','ok');
+  } catch(e) { console.error(e); toast('Fehler: '+e.message,'err'); }
+}
+
+// ── Rechnungsadressen ────────────────────────────────────────────────────────
+function getRAs() { try { return JSON.parse(localStorage.getItem('st_rechnungsadressen')||'{}'); } catch(e) { return {}; } }
+function setRAs(obj) { localStorage.setItem('st_rechnungsadressen', JSON.stringify(obj)); }
+
+function openRechnungsadressen() {
+  renderRAList();
+  cancelRAEdit();
+  document.getElementById('m-rechnungsadressen').classList.add('open');
+}
+
+function renderRAList() {
+  const ras = getRAs();
+  const keys = Object.keys(ras);
+  const el = document.getElementById('ra-list');
+  if (!keys.length) {
+    el.innerHTML = '<div style="color:#94a3b8;font-size:13px;padding:8px 0">Noch keine Adressen gespeichert.</div>';
+    return;
+  }
+  el.innerHTML = keys.map(k => {
+    const r = ras[k];
+    const ks = k.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div style="font-weight:600;font-size:13px">${r.name}</div>
+        <div style="font-size:12px;color:#64748b">${r.strasse} · ${r.plzOrt}</div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:2px">Kürzel: ${r.key}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0;margin-left:8px">
+        <button class="btn btn-secondary" style="padding:4px 10px;font-size:12px" onclick="editRA('${ks}')">✏️</button>
+        <button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;color:#ef4444" onclick="deleteRA('${ks}')">🗑️</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function editRA(key) {
+  const r = getRAs()[key];
+  if (!r) return;
+  document.getElementById('ra-edit-key').value = key;
+  document.getElementById('ra-key').value = r.key;
+  document.getElementById('ra-name').value = r.name;
+  document.getElementById('ra-strasse').value = r.strasse;
+  document.getElementById('ra-plzort').value = r.plzOrt;
+  document.getElementById('ra-form-title').textContent = 'Adresse bearbeiten';
+}
+
+function deleteRA(key) {
+  const ras = getRAs();
+  delete ras[key];
+  setRAs(ras);
+  renderRAList();
+}
+
+function cancelRAEdit() {
+  document.getElementById('ra-edit-key').value = '';
+  document.getElementById('ra-key').value = '';
+  document.getElementById('ra-name').value = '';
+  document.getElementById('ra-strasse').value = '';
+  document.getElementById('ra-plzort').value = '';
+  document.getElementById('ra-form-title').textContent = 'Neue Adresse';
+}
+
+function saveRechnungsadresse() {
+  const key  = document.getElementById('ra-key').value.trim();
+  const name = document.getElementById('ra-name').value.trim();
+  const str  = document.getElementById('ra-strasse').value.trim();
+  const plz  = document.getElementById('ra-plzort').value.trim();
+  if (!key || !name) { toast('Kürzel und Name sind Pflichtfelder','err'); return; }
+  const editKey = document.getElementById('ra-edit-key').value;
+  const ras = getRAs();
+  if (editKey && editKey !== key) delete ras[editKey];
+  ras[key] = { key, name, strasse: str, plzOrt: plz };
+  setRAs(ras);
+  cancelRAEdit();
+  renderRAList();
+  toast('Adresse gespeichert ✓','ok');
+}
+
+// ── Kontakte ─────────────────────────────────────────────────────────────────
+const MAIL_FROM = 'info@serviceteam1.de';
+
+function getKontakte() { try { return JSON.parse(localStorage.getItem('st_kontakte')||'{}'); } catch(e) { return {}; } }
+function setKontakte(obj) { localStorage.setItem('st_kontakte', JSON.stringify(obj)); }
+
+function openKontakte() {
+  renderKontaktList();
+  cancelKontaktEdit();
+  document.getElementById('m-kontakte').classList.add('open');
+}
+
+function renderKontaktList() {
+  const kos = getKontakte();
+  const keys = Object.keys(kos);
+  const el = document.getElementById('ko-list');
+  if (!keys.length) {
+    el.innerHTML = '<div style="color:#94a3b8;font-size:13px;padding:8px 0">Noch keine Kontakte gespeichert.</div>';
+    return;
+  }
+  el.innerHTML = keys.map(k => {
+    const c = kos[k];
+    const ks = k.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div style="font-weight:600;font-size:13px">${c.name}</div>
+        <div style="font-size:12px;color:#64748b">${c.email}${c.tel ? ' · '+c.tel : ''}</div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:2px">Kürzel: ${c.key}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0;margin-left:8px">
+        <button class="btn btn-secondary" style="padding:4px 10px;font-size:12px" onclick="editKontakt('${ks}')">✏️</button>
+        <button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;color:#ef4444" onclick="deleteKontakt('${ks}')">🗑️</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function editKontakt(key) {
+  const c = getKontakte()[key];
+  if (!c) return;
+  document.getElementById('ko-edit-key').value = key;
+  document.getElementById('ko-key').value = c.key;
+  document.getElementById('ko-name').value = c.name;
+  document.getElementById('ko-email').value = c.email;
+  document.getElementById('ko-tel').value = c.tel || '';
+  document.getElementById('ko-form-title').textContent = 'Kontakt bearbeiten';
+}
+
+function deleteKontakt(key) {
+  const kos = getKontakte();
+  delete kos[key];
+  setKontakte(kos);
+  renderKontaktList();
+}
+
+function cancelKontaktEdit() {
+  document.getElementById('ko-edit-key').value = '';
+  document.getElementById('ko-key').value = '';
+  document.getElementById('ko-name').value = '';
+  document.getElementById('ko-email').value = '';
+  document.getElementById('ko-tel').value = '';
+  document.getElementById('ko-form-title').textContent = 'Neuer Kontakt';
+}
+
+function saveKontakt() {
+  const key   = document.getElementById('ko-key').value.trim();
+  const name  = document.getElementById('ko-name').value.trim();
+  const email = document.getElementById('ko-email').value.trim();
+  const tel   = document.getElementById('ko-tel').value.trim();
+  if (!key || !name || !email) { toast('Kürzel, Name und E-Mail sind Pflichtfelder','err'); return; }
+  const editKey = document.getElementById('ko-edit-key').value;
+  const kos = getKontakte();
+  if (editKey && editKey !== key) delete kos[editKey];
+  kos[key] = { key, name, email, tel };
+  setKontakte(kos);
+  cancelKontaktEdit();
+  renderKontaktList();
+  toast('Kontakt gespeichert ✓','ok');
+}
+
+// Öffnet einen Entwurf in der DESKTOP-Outlook-App (kein Browser, kein Login).
+// Das Dokument wird lokal erzeugt und an server.py geschickt, der es per
+// Outlook-COM als neuen, NICHT gesendeten Entwurf mit Anhang anzeigt.
+async function openDesktopOutlookDraft({ to, subject, body, blob, filename }) {
+  const fileBase64 = blob ? await blobToBase64(blob) : '';
+  let resp;
+  try {
+    resp = await fetch('/outlook-draft', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to, subject, body, filename, fileBase64 })
+    });
+  } catch(e) {
+    throw new Error('Lokaler Outlook-Dienst nicht erreichbar – bitte die App über start_app.bat starten.');
+  }
+  if (resp.status === 404 || resp.status === 501) {
+    throw new Error('Bitte App neu starten: das schwarze Fenster (start_app.bat) schließen und erneut öffnen.');
+  }
+  let result = {};
+  try { result = await resp.json(); } catch(e) {}
+  if (!resp.ok || !result.ok) {
+    throw new Error(result.error || ('Outlook-Entwurf fehlgeschlagen (HTTP ' + resp.status + ').'));
+  }
+}
+
+// Setzt den Status zuverlässig auf "Leistungsnachweis" (DB + lokaler State + offenes Modal)
+async function setStatusLeistungsnachweis() {
+  if (!cur) return false;
+  if (cur.status === 'Leistungsnachweis') return true; // schon gesetzt – nichts zu tun
+  const upd = { status: 'Leistungsnachweis', updated_at: new Date().toISOString() };
+  const { error: stErr } = await sb.from('auftraege').update(upd).eq('id', cur.id);
+  if (stErr) {
+    toast('Status konnte nicht gespeichert werden: ' + stErr.message, 'err');
+    return false;
+  }
+  // Lokalen State aktualisieren
+  Object.assign(cur, upd);
+  const idx = data.findIndex(r => r.id === cur.id);
+  if (idx >= 0) Object.assign(data[idx], upd);
+  // Offenes Büro-Detail-Modal sofort mitaktualisieren
+  const sel = document.getElementById('bd-status');
+  if (sel) sel.value = 'Leistungsnachweis';
+  const bdBadge = document.getElementById('bd-badge');
+  if (bdBadge) bdBadge.innerHTML = badge('Leistungsnachweis');
+  // Kartenliste & Statistik im Hintergrund neu rendern
+  renderBuero(); renderStats();
+  return true;
+}
+
+async function sendMailEntwurf() {
+  if (!cur) return;
+
+  // Kontakt für diesen Melder finden
+  const melderLine = (cur.melder||'').split('\n')[0].trim().toLowerCase();
+  const ko = Object.values(getKontakte()).find(k =>
+    melderLine.includes(k.key.toLowerCase()) || k.key.toLowerCase().includes(melderLine)
+  );
+  if (!ko) {
+    toast('Kein Kontakt für diesen Melder gefunden – bitte unter 📋 Kontakte hinterlegen.','err');
+    return;
+  }
+  // Betreff & Body
+  const subject = `Leistungsnachweis – ${cur.auftrag||''} – ${(cur.anschrift||'').split('\n')[0]}`;
+  const vorname = ko.name.split(' ')[0] || 'X';
+  const body = `Hallo ${vorname},\n\nanbei findest du den Leistungsnachweis für den erledigten Auftrag.\n\nBitte unterschreibe das Dokument und sende es uns anschließend zurück.\n\nDanke dir.\n\nViele Grüße\nService Team\n\nTel. 01556 / 6363222 | ${MAIL_FROM}\nWickerer Straße 33A | 65439 Flörsheim`;
+
+  try {
+    toast('PDF wird 1:1 aus der Word-Vorlage erstellt & Outlook geöffnet…','ok');
+    const baseName = 'Leistungsnachweis_'+(cur.auftrag||'Auftrag').replace(/[^\w-]/g,'_');
+    // PDF exakt aus der Word-Vorlage erzeugen (Graph-Konvertierung = 1:1 Layout)
+    const token   = await getGraphToken();
+    const wordBlob = await genWordLeistungsnachweis(true);
+    if (!wordBlob) { toast('Dokument konnte nicht erstellt werden','err'); return; }
+    const pdfBlob = await convertWordToPdf(token, wordBlob, baseName);
+
+    // Outlook-Entwurf öffnen – erst danach gilt der Schritt als erfolgreich
+    await openDesktopOutlookDraft({ to: ko.email, subject, body, blob: pdfBlob, filename: baseName + '.pdf' });
+
+    // ERST JETZT (PDF erstellt + Outlook-Entwurf geöffnet) Status setzen
+    await setStatusLeistungsnachweis();
+
+    // PDF gleichzeitig in OneDrive-Ordner "gesendet via outlook" speichern
+    const gesendetOrdner = ONEDRIVE_BASE + '/gesendet via outlook';
+    await ensureOneDriveFolder(token, gesendetOrdner);
+    await uploadToOneDrive(token, pdfBlob, `${gesendetOrdner}/${baseName}.pdf`);
+
+    toast(`✓ Status „Leistungsnachweis" gesetzt · Entwurf für ${ko.name} in Outlook geöffnet & PDF in OneDrive gespeichert`,'ok');
+  } catch(e) {
+    console.error(e);
+    toast('Fehler beim E-Mail-Entwurf: '+(e.message||e),'err');
+  }
+}
+
+// Init
+loadData();
+</script>
+
+<!-- Footer -->
+<div class="app-footer">
+  <div class="app-footer-brand">Service Team MA GmbH</div>
+  <div class="app-footer-info">Wickerer Str. 33A · 65439 Flörsheim · Tel. 01556 / 6363222</div>
+</div>
+</body>
+</html>
