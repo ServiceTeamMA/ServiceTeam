@@ -120,10 +120,10 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 #4f46e5}
 .fab:hover{transform:scale(1.07)}
 
 /* ── Modal ── */
-.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:flex-end;justify-content:center}
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:flex-end;justify-content:center;overflow:hidden}
 @media(min-width:640px){.overlay{align-items:center}}
 .overlay.open{display:flex}
-.modal{background:#fff;border-radius:16px 16px 0 0;width:100%;max-height:92vh;overflow-y:auto;padding:20px 18px}
+.modal{background:#fff;border-radius:16px 16px 0 0;width:100%;max-height:92vh;overflow-y:auto;overflow-x:hidden;touch-action:pan-y;padding:20px 18px}
 @media(min-width:640px){.modal{border-radius:16px;max-width:640px;max-height:88vh}}
 .modal-hd{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border)}
 .modal-title{font-size:17px;font-weight:700;line-height:1.3}
@@ -372,6 +372,7 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 #4f46e5}
       <button class="btn btn-secondary" style="font-size:12px" onclick="saveToOneDrive('word')">☁️ Word → OneDrive</button>
       <button class="btn btn-secondary" style="font-size:12px" onclick="saveToOneDrive('pdf')">☁️ PDF → OneDrive</button>
     </div>
+    <div id="bd-lexware-wrap" style="margin-bottom:10px"></div>
     <div class="btn-row">
       <button class="btn btn-secondary" onclick="closeModal('m-buero-detail')">Schließen</button>
       <button class="btn btn-primary" style="flex:1" onclick="saveBuero()">Speichern</button>
@@ -379,6 +380,7 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 #4f46e5}
   </div>
 </div>
 
+<!-- ══ LEXWARE RECHNUNGSENTWURF MODAL ══ -->
 <!-- ══ NEUER AUFTRAG MODAL ══ -->
 <div class="overlay" id="m-new">
   <div class="modal">
@@ -416,6 +418,13 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 #4f46e5}
 
     <!-- Auftrag-Info (read-only) -->
     <div class="info-grid" id="ln-order-info" style="margin-bottom:10px"></div>
+
+    <!-- Kunde / Steuer für die Rechnung -->
+    <div class="fg">
+      <label>Kunde / Steuer (für Lexware-Rechnung)</label>
+      <select id="ln-kunde" onchange="updateVorschau()"></select>
+      <div id="ln-kunde-hint" style="font-size:12px;color:var(--muted);margin-top:4px"></div>
+    </div>
 
     <!-- GWH: Fallnummer -->
     <div id="ln-gwh-section" style="display:none">
@@ -460,37 +469,15 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 #4f46e5}
       <div class="ln-preview-row"><span>Fahrtkosten</span><span id="lnp-fahrt">–</span></div>
       <div class="ln-preview-row"><span>Material</span><span id="lnp-material">–</span></div>
       <div class="ln-preview-row ln-preview-total"><span>Netto</span><span id="lnp-netto">–</span></div>
-      <div class="ln-preview-row" style="color:var(--muted)"><span>zzgl. 19% MwSt.</span><span id="lnp-mwst">–</span></div>
+      <div class="ln-preview-row" style="color:var(--muted)"><span id="lnp-mwst-label">zzgl. 19% MwSt.</span><span id="lnp-mwst">–</span></div>
       <div class="ln-preview-row ln-preview-total" style="color:var(--primary)"><span>Brutto</span><span id="lnp-brutto">–</span></div>
-    </div>
-
-    <div class="section-label">Unterschrift Handwerker</div>
-    <div class="fg">
-      <div class="sig-wrap"><canvas id="ln-sig-hw" width="500" height="120"></canvas><div class="sig-foot">Unterschrift Handwerker</div></div>
-      <button onclick="clearSig('ln-sig-hw')" class="btn btn-secondary" style="margin-top:6px;padding:6px 14px;font-size:12px">Löschen</button>
-    </div>
-
-    <div id="ln-gwh-sigs" style="display:none">
-      <div class="section-label">Unterschrift Hauswart</div>
-      <div class="fg">
-        <div class="sig-wrap"><canvas id="ln-sig-hw2" width="500" height="120"></canvas><div class="sig-foot">Unterschrift Hauswart</div></div>
-        <button onclick="clearSig('ln-sig-hw2')" class="btn btn-secondary" style="margin-top:6px;padding:6px 14px;font-size:12px">Löschen</button>
-      </div>
-      <div class="section-label">Unterschrift Mieter</div>
-      <div class="fg">
-        <div class="sig-wrap"><canvas id="ln-sig-mieter" width="500" height="120"></canvas><div class="sig-foot">Unterschrift Mieter</div></div>
-        <button onclick="clearSig('ln-sig-mieter')" class="btn btn-secondary" style="margin-top:6px;padding:6px 14px;font-size:12px">Löschen</button>
-      </div>
     </div>
 
     <div class="btn-row">
       <button class="btn btn-secondary" onclick="closeLNModal()">Abbrechen</button>
       <button class="btn btn-primary" style="flex:1" onclick="saveLeistung()">💾 Speichern</button>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
-      <button class="btn btn-primary" style="background:#0d9488;font-size:13px" onclick="genLNPDF('eigen')">📄 Leistungsnachweis PDF</button>
-      <button class="btn btn-primary" id="ln-gwh-pdf-btn" style="background:#7c3aed;font-size:13px;display:none" onclick="genLNPDF('gwh')">📄 GWH Formular PDF</button>
-    </div>
+    <div id="ln-lexware-section" style="margin-top:12px"></div>
   </div>
 </div>
 
@@ -778,20 +765,42 @@ function calcTeamStunden(){
   el.textContent=`${von}–${bis} Uhr · ${hStr} Stunde${h===1?'':'n'}`;
 }
 
-function addTeamMaterial(bez='',menge=''){
+function addTeamMaterial(bez='',menge='',artikelId='',ep='',einheit=''){
+  const inp='border:1.5px solid var(--border);border-radius:6px;padding:8px 10px;font-size:13px;font-family:inherit;outline:none;width:100%;background:#fff';
   const d=document.createElement('div');
-  d.style.cssText='display:grid;grid-template-columns:1fr 1fr 32px;gap:6px;align-items:center;margin-bottom:6px';
-  d.innerHTML=`<input type="text" class="d-mat-bez" placeholder="Bezeichnung" value="${escAttr(bez)}" style="border:1.5px solid var(--border);border-radius:6px;padding:8px 10px;font-size:13px;font-family:inherit;outline:none;width:100%;background:#fff">
-    <input type="text" class="d-mat-menge" placeholder="Menge (z.B. 2 Stück)" value="${escAttr(menge)}" style="border:1.5px solid var(--border);border-radius:6px;padding:8px 10px;font-size:13px;font-family:inherit;outline:none;width:100%;background:#fff">
-    <button class="ln-row-del" onclick="this.parentNode.remove()">×</button>`;
+  d.className='d-mat-row';
+  d.style.cssText='border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:8px';
+  d.innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 32px;gap:6px;align-items:center;margin-bottom:6px">
+      <select class="d-mat-artikel" onchange="onTeamArtikelSelect(this)" style="${inp}">${artikelOptions(artikelId)}</select>
+      <button class="ln-row-del" onclick="this.closest('.d-mat-row').remove()">×</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;align-items:center">
+      <input type="text" class="d-mat-bez" placeholder="Bezeichnung" value="${escAttr(bez)}" style="${inp}">
+      <input type="text" class="d-mat-menge" placeholder="Menge (z.B. 2)" value="${escAttr(menge)}" style="${inp}">
+    </div>
+    <input type="hidden" class="d-mat-ep" value="${ep}">
+    <input type="hidden" class="d-mat-einheit" value="${escAttr(einheit)}">`;
   document.getElementById('d-material-list').appendChild(d);
 }
 
+function onTeamArtikelSelect(sel){
+  const row=sel.closest('.d-mat-row'); const opt=sel.options[sel.selectedIndex];
+  if(sel.value){
+    row.querySelector('.d-mat-bez').value=opt.dataset.bez||'';
+    row.querySelector('.d-mat-ep').value=opt.dataset.ep||'';
+    row.querySelector('.d-mat-einheit').value=opt.dataset.einheit||'Stück';
+  }
+}
+
 function collectTeamMaterial(){
-  return [...document.querySelectorAll('#d-material-list [class*="d-mat-bez"]')].map(inp=>{
-    const row=inp.parentNode;
-    return {bez:inp.value.trim(), menge:row.querySelector('.d-mat-menge').value.trim()};
-  }).filter(m=>m.bez||m.menge);
+  return [...document.querySelectorAll('#d-material-list .d-mat-row')].map(row=>({
+    bez:    row.querySelector('.d-mat-bez').value.trim(),
+    menge:  row.querySelector('.d-mat-menge').value.trim(),
+    artikelId: row.querySelector('.d-mat-artikel')?.value||'',
+    ep:     parseFloat(row.querySelector('.d-mat-ep')?.value)||0,
+    einheit:row.querySelector('.d-mat-einheit')?.value||'',
+  })).filter(m=>m.bez||m.menge);
 }
 
 // ── Load ───────────────────────────────────────────────────────────────────
@@ -864,7 +873,7 @@ function filtered(searchId, statusId) {
   const st = document.getElementById(statusId).value;
   return data.filter(r => {
     if (st && r.status !== st) return false;
-    if (q) return [r.auftrag,r.anschrift,r.beschreibung,r.auftraggeber,r.mieter,r.melder,r.rechnung]
+    if (q) return [r.auftrag,r.anschrift,r.beschreibung,r.auftraggeber,r.mieter,r.melder,r.rechnung,String(r.pos||'')]
       .some(f => f && f.toLowerCase().includes(q));
     return true;
   });
@@ -948,6 +957,7 @@ function openBueroDetail(id) {
     </div>` : '';
 
   renderBDLNSection(cur);
+  renderLexwareButton(cur);
 
   // ── Automatik-Info: Kontakt + Rechnungsadresse ──
   const agLine   = (cur.auftraggeber||'').split('\n')[0].trim().toLowerCase();
@@ -986,6 +996,113 @@ async function saveBuero() {
   toast('Gespeichert ✓','ok');
 }
 
+// ══ Lexware: Material-Katalog, Kunden, Entwurf ═══════════════════════════════
+let lnKunden=[], lnArtikel=[];
+function lxR2(x){ return Math.round((Number(x)+Number.EPSILON)*100)/100; }
+
+// Büro-Detail: Button der den Leistungsnachweis (inkl. Lexware) öffnet
+function renderLexwareButton(r){
+  const wrap=document.getElementById('bd-lexware-wrap'); if(!wrap) return;
+  let html='';
+  if(r.lexware_invoice_id){
+    html+=`<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 12px;font-size:12px;margin-bottom:8px">
+      ✅ <b>Lexware-Entwurf vorhanden.</b>
+      <a href="https://app.lexware.de/permalink/invoices/view/${r.lexware_invoice_id}" target="_blank" style="color:#0d9488">In Lexware öffnen</a></div>`;
+  }
+  const label=r.leistungsnachweis?'📋 Leistungsnachweis / Rechnung':'📋 Leistungsnachweis für Abrechnung ausfüllen';
+  html+=`<button class="btn btn-secondary" style="width:100%;font-size:13px;border-color:#0d9488;color:#0d9488" onclick="openLNFromBuero()">${label}</button>`;
+  wrap.innerHTML=html;
+}
+
+// Kunden + Material-Katalog vom lokalen Server laden
+async function ladeLexwareStammdaten(){
+  try{ const j=await (await fetch('/lexware-kunden')).json(); if(j.ok) lnKunden=j.kunden||[]; }catch(e){}
+  try{ const j=await (await fetch('/lexware-artikel')).json(); if(j.ok) lnArtikel=j.artikel||[]; }catch(e){ lnArtikel=[]; }
+}
+
+// Optionen für das Material-Dropdown (Freitext + alle Lexware-Artikel)
+function artikelOptions(selId){
+  return `<option value="">— Freitext / eigenes Material —</option>`+
+    lnArtikel.map(a=>`<option value="${a.id}" data-bez="${escAttr(a.title)}" data-ep="${a.netPrice}" data-einheit="${escAttr(a.unitName)}"${a.id===selId?' selected':''}>${escAttr(a.title)} (${fmtE(a.netPrice)} €)</option>`).join('');
+}
+function onArtikelSelect(sel){
+  const row=sel.closest('.ln-mat-row'); const opt=sel.options[sel.selectedIndex];
+  if(sel.value){
+    row.querySelector('.ln-mat-bez').value=opt.dataset.bez||'';
+    row.querySelector('.ln-mat-ep').value=opt.dataset.ep||'';
+    row.querySelector('.ln-mat-einheit').value=opt.dataset.einheit||'Stück';
+    const m=row.querySelector('.ln-mat-menge'); if(!parseFloat(m.value)) m.value=1;
+  }
+  updateVorschau();
+}
+
+// In-Formular Lexware-Bereich (Button zum Erstellen oder Status, wenn Entwurf existiert)
+function renderLNLexwareSection(){
+  const el=document.getElementById('ln-lexware-section'); if(!el) return;
+  if(lnCur && lnCur.lexware_invoice_id){
+    el.innerHTML=`<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;font-size:13px">
+      ✅ <b>Lexware-Entwurf vorhanden.</b>
+      <a href="https://app.lexware.de/permalink/invoices/view/${lnCur.lexware_invoice_id}" target="_blank" style="color:#0d9488;font-weight:600">In Lexware öffnen</a></div>`;
+  } else {
+    el.innerHTML=`<button class="btn btn-primary" id="ln-lexware-btn" style="width:100%;background:#0d9488;font-size:14px" onclick="createLexwareFromLN()">🧾 Entwurf in Lexware erstellen</button>
+      <div id="ln-lexware-result" style="display:none;margin-top:10px"></div>`;
+  }
+}
+
+// Speichert den Leistungsnachweis nach Supabase (gemeinsame Basis für Speichern + Lexware)
+async function persistLN(ln){
+  const upd={leistungsnachweis:ln, status:'Arbeit durchgeführt', updated_at:new Date().toISOString()};
+  const {error}=await sb.from('auftraege').update(upd).eq('id',lnCur.id);
+  if(error){ toast('Fehler: '+error.message,'err'); return false; }
+  Object.assign(lnCur,upd);
+  const idx=data.findIndex(r=>r.id===lnCur.id); if(idx>=0) Object.assign(data[idx],upd);
+  return true;
+}
+
+async function createLexwareFromLN(){
+  if(!lnCur) return;
+  if(lnCur.lexware_invoice_id){ toast('Für diesen Auftrag existiert bereits ein Entwurf.','err'); return; }
+  const kundeKey=document.getElementById('ln-kunde')?.value||'';
+  const kunde=lnKunden.find(k=>k.key===kundeKey);
+  if(!kunde){ toast('Bitte Kunde / Steuer wählen.','err'); return; }
+
+  // Erst speichern, damit Supabase + Vorschau dem Entwurf entsprechen
+  const ln=collectLN();
+  if(!(await persistLN(ln))) return;
+  renderTeam(); renderBuero(); renderStats();
+
+  if(!confirm(`Rechnungsentwurf für "${kunde.name}" in Lexware erstellen?\n\nEs wird nur ein ENTWURF angelegt – nichts versendet.`)) return;
+
+  const row={id:lnCur.id,auftrag:lnCur.auftrag||'',anschrift:lnCur.anschrift||'',mieter:lnCur.mieter||'',auftraggeber:lnCur.auftraggeber||''};
+  const btn=document.getElementById('ln-lexware-btn'); const res=document.getElementById('ln-lexware-result');
+  if(btn){ btn.disabled=true; btn.textContent='Erstelle Entwurf…'; }
+  try{
+    const j=await (await fetch('/lexware-draft',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({row,ln,kundeKey})})).json();
+    if(!j.ok) throw new Error(j.error||'Unbekannter Fehler');
+
+    const {error}=await sb.from('auftraege').update({lexware_invoice_id:String(j.draftId),updated_at:new Date().toISOString()}).eq('id',lnCur.id);
+    lnCur.lexware_invoice_id=String(j.draftId);
+    const idx=data.findIndex(r=>r.id===lnCur.id); if(idx>=0) data[idx].lexware_invoice_id=String(j.draftId);
+
+    const gegen=j.gegenprobe==='OK'?`<div style="color:#16a34a">✓ ${j.gegenprobeMsg}</div>`:`<div style="color:#f59e0b">⚠ ${j.gegenprobeMsg}</div>`;
+    const warn=error?`<div style="color:#f59e0b">⚠ lexware_invoice_id nicht gespeichert – bitte prüfen.</div>`:'';
+    if(res){ res.style.display='block';
+      res.innerHTML=`<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;font-size:13px">
+      ✅ <b>Entwurf erstellt.</b><br>Netto ${fmtE(j.netto)} € · ${j.reverse?'§13b 0%':'USt '+fmtE(j.ust)+' €'} · Brutto ${fmtE(j.brutto)} €<br>
+      ${gegen}${warn}<a href="${j.link}" target="_blank" style="color:#0d9488;font-weight:600">→ In Lexware öffnen/prüfen</a></div>`;
+    }
+    renderLNLexwareSection();
+    renderBuero();
+    toast('Lexware-Entwurf erstellt ✓','ok');
+  }catch(e){
+    if(res){ res.style.display='block';
+      res.innerHTML=`<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;font-size:13px;color:#b91c1c">❌ Fehler: ${e.message}</div>`;
+    }
+    if(btn){ btn.disabled=false; btn.textContent='🧾 Entwurf in Lexware erstellen'; }
+    toast('Fehler beim Erstellen','err');
+  }
+}
+
 // ── Team ───────────────────────────────────────────────────────────────────
 function renderTeam() {
   const rows = filtered('t-search','t-status');
@@ -1011,10 +1128,11 @@ function renderTeam() {
 }
 
 // ── Team Detail ────────────────────────────────────────────────────────────
-function openDetail(id) {
+async function openDetail(id) {
   cur = data.find(r=>r.id===id); if(!cur) return;
   exPhotos = [...(cur.bilder||[])];
   newPhotos = [];
+  if(!lnArtikel.length) await ladeLexwareStammdaten();  // Material-Katalog für Dropdown
   document.getElementById('d-title').textContent = cur.auftrag||'Auftrag';
   document.getElementById('d-badge').innerHTML = badge(cur.status);
   document.getElementById('d-status').value = cur.status||'Offen';
@@ -1027,7 +1145,7 @@ function openDetail(id) {
   document.getElementById('d-bis').value = einsatz.bis || '';
   document.getElementById('d-taetigkeit').value = einsatz.taetigkeit || '';
   document.getElementById('d-material-list').innerHTML = '';
-  (einsatz.material||[]).forEach(m=>addTeamMaterial(m.bez,m.menge));
+  (einsatz.material||[]).forEach(m=>addTeamMaterial(m.bez,m.menge,m.artikelId,m.ep,m.einheit));
   calcTeamStunden();
   clearSig('d-sig-hw'); clearSig('d-sig-mieter');
   initSigPad('d-sig-hw'); initSigPad('d-sig-mieter');
@@ -1199,6 +1317,15 @@ document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{
   if(e.target===o && o.id==='m-leistung') closeLNModal();
 }));
 
+// Close on ESC key
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape') return;
+  const open=[...document.querySelectorAll('.overlay.open')];
+  if(!open.length) return;
+  const top=open[open.length-1];
+  if(top.id==='m-leistung') closeLNModal(); else { top.classList.remove('open'); cur=null; }
+});
+
 // ── Leistungsnachweis ────────────────────────────────────────────────────────
 const SATZ_GWH = 49.63;
 const SATZ_STD = 65.00;
@@ -1210,15 +1337,38 @@ let lnIsGWH = false;
 
 function isGWHOrder(r){ return !!(r.auftraggeber && r.auftraggeber.toLowerCase().includes('gwh')); }
 
-function openLeistung(id){
+function openLNFromBuero(){
+  if(!cur) return;
+  // Büro-Modal offen lassen — LN-Modal öffnet sich davor
+  // Wenn noch kein leistungsnachweis existiert, aus mitarbeiter_bericht vorausfüllen
+  if(!cur.leistungsnachweis){
+    let ez = {};
+    try { const p = JSON.parse(cur.mitarbeiter_bericht||'{}'); if(p&&typeof p==='object') ez = p; } catch(e){}
+    if(Object.keys(ez).length){
+      const std = ez.stundenInfo ? parseFloat((ez.stundenInfo.match(/·\s*([\d,\.]+)\s*Stund/)||[])[1]?.replace(',','.')) : 0;
+      cur._lnPrefill = {
+        datum:       ez.leistungsdatum || '',
+        anzahl:      ez.anzahl || 1,
+        ankunft:     ez.von || '',
+        abfahrt:     ez.bis || '',
+        stunden:     std > 0 ? String(std) : '',
+        leistungen:  ez.taetigkeit ? [ez.taetigkeit] : [],
+        materialien: (ez.material||[]).map(m=>({bez:m.bez||'',det:'',menge:parseFloat(m.menge)||1,einheit:m.einheit||'Stück',ep:m.ep||0,artikelId:m.artikelId||''})),
+      };
+    }
+  }
+  openLeistung(cur.id);
+}
+
+async function openLeistung(id){
   if(!id) return;
   lnCur = data.find(r=>r.id===id); if(!lnCur) return;
   lnIsGWH = isGWHOrder(lnCur);
 
   document.getElementById('ln-title').textContent = lnIsGWH ? '📋 GWH Stundenzettel' : '📋 Leistungsnachweis';
   document.getElementById('ln-gwh-section').style.display = lnIsGWH ? 'block' : 'none';
-  document.getElementById('ln-gwh-sigs').style.display    = lnIsGWH ? 'block' : 'none';
-  document.getElementById('ln-gwh-pdf-btn').style.display = lnIsGWH ? 'block' : 'none';
+  const _gwhs = document.getElementById('ln-gwh-sigs');    if(_gwhs)    _gwhs.style.display    = lnIsGWH ? 'block' : 'none';
+  const _gwpb = document.getElementById('ln-gwh-pdf-btn'); if(_gwpb)    _gwpb.style.display    = lnIsGWH ? 'block' : 'none';
 
   document.getElementById('ln-order-info').innerHTML =
     `<div class="info-item"><div class="lbl">Auftrag</div><div class="val">${lnCur.auftrag||'–'}</div></div>`+
@@ -1228,16 +1378,35 @@ function openLeistung(id){
     (lnCur.mieter?`<div class="info-item full"><div class="lbl">Mieter</div><div class="val">${lnCur.mieter}</div></div>`:'')+
     (lnCur.beschreibung?`<div class="info-item full"><div class="lbl">Beschreibung</div><div class="val">${lnCur.beschreibung}</div></div>`:'');
 
+  // Lexware-Stammdaten (Kunden + Material) laden, BEVOR Material-Zeilen gebaut werden
+  document.getElementById('m-leistung').classList.add('open');
+  document.getElementById('ln-kunde').innerHTML='<option>… lädt …</option>';
+  renderLNLexwareSection();
+  await ladeLexwareStammdaten();
+  fuelleKundeDropdown();
+
   const ln = lnCur.leistungsnachweis;
-  if(ln){ populateLN(ln); } else { resetLN(); }
+  if(ln){ populateLN(ln); }
+  else if(lnCur._lnPrefill){ populateLN(lnCur._lnPrefill); delete lnCur._lnPrefill; }
+  else { resetLN(); }
 
   renderFahrtSection();
   initAllSigPads();
 
   if(lnIsGWH && !ln?.km && lnCur.anschrift) setTimeout(()=>calcAndSetKm(), 400);
 
-  document.getElementById('m-leistung').classList.add('open');
   updateVorschau();
+}
+
+// Kunde/Steuer-Dropdown füllen und passend zum Auftraggeber vorauswählen
+function fuelleKundeDropdown(){
+  const sel=document.getElementById('ln-kunde'); if(!sel) return;
+  if(!lnKunden.length){ sel.innerHTML='<option value="">(Server nicht erreichbar – keine Kunden)</option>'; return; }
+  sel.innerHTML=`<option value="">— bitte wählen —</option>`+
+    lnKunden.map(k=>`<option value="${k.key}">${k.name} — ${k.taxType==='constructionService13b'?'§13b (0%)':'19% USt'}</option>`).join('');
+  const ag=(lnCur.auftraggeber||'').toLowerCase();
+  const match=lnKunden.find(k=>ag.includes(k.key.toLowerCase()));
+  if(match) sel.value=match.key;
 }
 
 function closeLNModal(){ document.getElementById('m-leistung').classList.remove('open'); }
@@ -1272,10 +1441,11 @@ function populateLN(ln){
   document.getElementById('ln-nacharbeiten-list').innerHTML='';
   (ln.nacharbeiten||[]).forEach(v=>addNacharbeitRow(v));
   document.getElementById('ln-material-list').innerHTML='';
-  (ln.materialien||[]).forEach(m=>addMaterialRow(m.bez,m.det,m.menge,m.einheit,m.ep));
+  (ln.materialien||[]).forEach(m=>addMaterialRow(m.bez,m.det,m.menge,m.einheit,m.ep,m.artikelId));
   renderFahrtSection();
-  if(lnIsGWH && ln.km){ const el=document.getElementById('ln-km'); if(el) el.value=ln.km; }
-  else if(!lnIsGWH && ln.pauschale){ const el=document.getElementById('ln-pauschale'); if(el) el.value=ln.pauschale; }
+  if(ln.km){ const el=document.getElementById('ln-km'); if(el) el.value=ln.km; }
+  if(ln.pauschale){ const el=document.getElementById('ln-pauschale'); if(el) el.value=ln.pauschale; }
+  if(ln.kundeKey){ const s=document.getElementById('ln-kunde'); if(s) s.value=ln.kundeKey; }
   if(ln.sigs){
     if(ln.sigs.hw)    setTimeout(()=>drawSigFromData('ln-sig-hw',    ln.sigs.hw),    100);
     if(ln.sigs.hw2)   setTimeout(()=>drawSigFromData('ln-sig-hw2',   ln.sigs.hw2),   100);
@@ -1312,21 +1482,21 @@ function addNacharbeitRow(val=''){
   d.innerHTML=`<input type="text" class="ln-nacharbeit-input" placeholder="Notwendige Nacharbeit…" value="${escAttr(val)}"><button class="ln-row-del" onclick="this.parentNode.remove()">×</button>`;
   document.getElementById('ln-nacharbeiten-list').appendChild(d);
 }
-function addMaterialRow(bez='',det='',menge='',einheit='Stück',ep=''){
+function addMaterialRow(bez='',det='',menge='',einheit='Stück',ep='',artikelId=''){
   const d=document.createElement('div'); d.className='ln-mat-row';
-  const einheiten=['Stück','m','m²','kg','Liter','Pauschal'];
-  const opts=einheiten.map(e=>`<option${e===einheit?' selected':''}>${e}</option>`).join('');
+  d.style.cssText='border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:8px';
   d.innerHTML=`
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
-      <input type="text" class="ln-mat-bez" placeholder="Bezeichnung" value="${escAttr(bez)}">
-      <input type="text" class="ln-mat-det" placeholder="Detail (opt.)" value="${escAttr(det)}">
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 32px;gap:6px;align-items:center">
-      <input type="number" class="ln-mat-menge" placeholder="Menge" value="${menge}" oninput="updateVorschau()">
-      <select class="ln-mat-einheit">${opts}</select>
-      <input type="number" class="ln-mat-ep" placeholder="EP €" step="0.01" value="${ep}" oninput="updateVorschau()">
+    <div style="display:grid;grid-template-columns:1fr 32px;gap:6px;margin-bottom:6px;align-items:center">
+      <select class="ln-mat-artikel" onchange="onArtikelSelect(this)" style="font-size:13px">${artikelOptions(artikelId)}</select>
       <button class="ln-row-del" onclick="this.closest('.ln-mat-row').remove();updateVorschau()">×</button>
     </div>
+    <div style="display:grid;grid-template-columns:1fr 64px 84px;gap:6px;align-items:center">
+      <input type="text" class="ln-mat-bez" placeholder="Bezeichnung" value="${escAttr(bez)}" oninput="updateVorschau()">
+      <input type="number" class="ln-mat-menge" placeholder="Menge" value="${menge}" oninput="updateVorschau()">
+      <input type="number" class="ln-mat-ep" placeholder="€/Einh." step="0.01" value="${ep}" oninput="updateVorschau()">
+    </div>
+    <input type="hidden" class="ln-mat-det" value="${escAttr(det)}">
+    <input type="hidden" class="ln-mat-einheit" value="${escAttr(einheit)}">
     <div class="ln-mat-gesamt" style="text-align:right;font-size:11px;color:var(--muted);margin-top:3px"></div>`;
   document.getElementById('ln-material-list').appendChild(d);
   updateVorschau();
@@ -1335,10 +1505,16 @@ function addMaterialRow(bez='',det='',menge='',einheit='Stück',ep=''){
 function renderFahrtSection(){
   const s=document.getElementById('ln-fahrt-section');
   if(lnIsGWH){
-    s.innerHTML=`<div class="fg"><label>Einfache Strecke km (OSRM)</label>
-      <div style="display:flex;gap:8px"><input type="number" id="ln-km" step="0.1" placeholder="km" style="flex:1" oninput="updateVorschau()">
-      <button class="btn btn-secondary" style="padding:10px 12px;white-space:nowrap;font-size:12px" onclick="calcAndSetKm()">📍 Berechnen</button></div>
-      <div style="font-size:11px;color:var(--muted);margin-top:4px">Gesamt: <b id="ln-km-total">–</b> km × 0,75 € = <b id="ln-km-betrag">–</b></div></div>`;
+    s.innerHTML=`
+      <div class="fg"><label>Einfache Strecke km (OSRM)</label>
+        <div style="display:flex;gap:8px"><input type="number" id="ln-km" step="0.1" placeholder="km" style="flex:1" oninput="updateVorschau()">
+        <button class="btn btn-secondary" style="padding:10px 12px;white-space:nowrap;font-size:12px" onclick="calcAndSetKm()">📍 Berechnen</button></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">Gesamt: <b id="ln-km-total">–</b> km × 0,75 € = <b id="ln-km-betrag">–</b></div>
+      </div>
+      <div class="fg"><label>oder Pauschale (€)</label>
+        <input type="number" id="ln-pauschale" step="0.01" placeholder="z.B. 15,00" oninput="updateVorschau()">
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">Wenn Pauschale ausgefüllt, wird km ignoriert.</div>
+      </div>`;
   } else {
     s.innerHTML=`<div class="fg"><label>An-/Abfahrt Pauschale (€)</label>
       <input type="number" id="ln-pauschale" step="0.01" placeholder="z.B. 15,00" oninput="updateVorschau()"></div>`;
@@ -1390,12 +1566,19 @@ function updateVorschau(){
   const anz  = parseInt(document.getElementById('ln-anzahl')?.value)||1;
   const satz = parseFloat(document.getElementById('ln-stundensatz')?.value)||(lnIsGWH?SATZ_GWH:SATZ_STD);
   const personal = std*anz*satz;
-  let fahrt=0;
-  if(lnIsGWH){ const km=parseFloat(document.getElementById('ln-km')?.value)||0; fahrt=km*2*KM_RATE; }
-  else { fahrt=parseFloat(document.getElementById('ln-pauschale')?.value)||0; }
+  // Fahrt: Pauschale hat Vorrang vor km (beides für GWH möglich)
+  const pausch = parseFloat(document.getElementById('ln-pauschale')?.value)||0;
+  const km     = parseFloat(document.getElementById('ln-km')?.value)||0;
+  const fahrt  = pausch>0 ? pausch : km*2*KM_RATE;
   let material=0;
   document.querySelectorAll('.ln-mat-row').forEach(r=>{ material+=(parseFloat(r.querySelector('.ln-mat-menge')?.value)||0)*(parseFloat(r.querySelector('.ln-mat-ep')?.value)||0); });
-  const netto=personal+fahrt+material, mwst=netto*0.19, brutto=netto+mwst;
+  // Steuer aus gewähltem Kunden (§13b -> 0%)
+  const kunde = lnKunden.find(k=>k.key===document.getElementById('ln-kunde')?.value);
+  const reverse = kunde && kunde.taxType==='constructionService13b';
+  const netto=personal+fahrt+material, mwst=reverse?0:netto*0.19, brutto=netto+mwst;
+  const hintEl=document.getElementById('ln-kunde-hint');
+  if(hintEl) hintEl.textContent = !kunde ? '⚠ Kein Kunde gewählt – für Lexware nötig.' : (reverse?'Steuerschuldumkehr §13b — 0% USt.':'Regelbesteuerung — 19% USt.');
+  const mwstLbl=document.getElementById('lnp-mwst-label'); if(mwstLbl) mwstLbl.textContent=reverse?'USt §13b (0%)':'zzgl. 19% MwSt.';
   document.getElementById('lnp-personal').textContent=fmtE(personal);
   document.getElementById('lnp-fahrt').textContent   =fmtE(fahrt);
   document.getElementById('lnp-material').textContent=fmtE(material);
@@ -1422,9 +1605,11 @@ function collectLN(){
       menge:parseFloat(r.querySelector('.ln-mat-menge').value)||0,
       einheit:r.querySelector('.ln-mat-einheit').value,
       ep:parseFloat(r.querySelector('.ln-mat-ep').value)||0,
+      artikelId:r.querySelector('.ln-mat-artikel')?.value||'',
     })).filter(m=>m.bez),
-    km:      lnIsGWH?(parseFloat(document.getElementById('ln-km')?.value)||0):null,
-    pauschale:!lnIsGWH?(parseFloat(document.getElementById('ln-pauschale')?.value)||0):null,
+    km:       parseFloat(document.getElementById('ln-km')?.value)||0,
+    pauschale:parseFloat(document.getElementById('ln-pauschale')?.value)||0,
+    kundeKey: document.getElementById('ln-kunde')?.value||'',
     sigs:{
       hw:     getSigData('ln-sig-hw'),
       hw2:    lnIsGWH?getSigData('ln-sig-hw2'):null,
@@ -1438,13 +1623,9 @@ function collectLN(){
 async function saveLeistung(){
   if(!lnCur) return;
   const ln=collectLN();
-  const upd={leistungsnachweis:ln, status:'Arbeit durchgeführt', updated_at:new Date().toISOString()};
-  const {error}=await sb.from('auftraege').update(upd).eq('id',lnCur.id);
-  if(error){toast('Fehler: '+error.message,'err');return;}
-  Object.assign(lnCur,upd);
-  const idx=data.findIndex(r=>r.id===lnCur.id);
-  if(idx>=0) Object.assign(data[idx],upd);
+  if(!(await persistLN(ln))) return;
   renderTeam(); renderBuero(); renderStats();
+  renderLNLexwareSection();   // Fenster bleibt offen, Lexware-Button erscheint
   toast('Leistungsnachweis gespeichert ✓','ok');
 }
 
@@ -1892,237 +2073,4 @@ function renderRAList() {
         <div style="font-size:11px;color:#94a3b8;margin-top:2px">Kürzel: ${r.key}</div>
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0;margin-left:8px">
-        <button class="btn btn-secondary" style="padding:4px 10px;font-size:12px" onclick="editRA('${ks}')">✏️</button>
-        <button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;color:#ef4444" onclick="deleteRA('${ks}')">🗑️</button>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function editRA(key) {
-  const r = getRAs()[key];
-  if (!r) return;
-  document.getElementById('ra-edit-key').value = key;
-  document.getElementById('ra-key').value = r.key;
-  document.getElementById('ra-name').value = r.name;
-  document.getElementById('ra-strasse').value = r.strasse;
-  document.getElementById('ra-plzort').value = r.plzOrt;
-  document.getElementById('ra-form-title').textContent = 'Adresse bearbeiten';
-}
-
-function deleteRA(key) {
-  const ras = getRAs();
-  delete ras[key];
-  setRAs(ras);
-  renderRAList();
-}
-
-function cancelRAEdit() {
-  document.getElementById('ra-edit-key').value = '';
-  document.getElementById('ra-key').value = '';
-  document.getElementById('ra-name').value = '';
-  document.getElementById('ra-strasse').value = '';
-  document.getElementById('ra-plzort').value = '';
-  document.getElementById('ra-form-title').textContent = 'Neue Adresse';
-}
-
-function saveRechnungsadresse() {
-  const key  = document.getElementById('ra-key').value.trim();
-  const name = document.getElementById('ra-name').value.trim();
-  const str  = document.getElementById('ra-strasse').value.trim();
-  const plz  = document.getElementById('ra-plzort').value.trim();
-  if (!key || !name) { toast('Kürzel und Name sind Pflichtfelder','err'); return; }
-  const editKey = document.getElementById('ra-edit-key').value;
-  const ras = getRAs();
-  if (editKey && editKey !== key) delete ras[editKey];
-  ras[key] = { key, name, strasse: str, plzOrt: plz };
-  setRAs(ras);
-  cancelRAEdit();
-  renderRAList();
-  toast('Adresse gespeichert ✓','ok');
-}
-
-// ── Kontakte ─────────────────────────────────────────────────────────────────
-const MAIL_FROM = 'info@serviceteam1.de';
-
-function getKontakte() { try { return JSON.parse(localStorage.getItem('st_kontakte')||'{}'); } catch(e) { return {}; } }
-function setKontakte(obj) { localStorage.setItem('st_kontakte', JSON.stringify(obj)); }
-
-function openKontakte() {
-  renderKontaktList();
-  cancelKontaktEdit();
-  document.getElementById('m-kontakte').classList.add('open');
-}
-
-function renderKontaktList() {
-  const kos = getKontakte();
-  const keys = Object.keys(kos);
-  const el = document.getElementById('ko-list');
-  if (!keys.length) {
-    el.innerHTML = '<div style="color:#94a3b8;font-size:13px;padding:8px 0">Noch keine Kontakte gespeichert.</div>';
-    return;
-  }
-  el.innerHTML = keys.map(k => {
-    const c = kos[k];
-    const ks = k.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    return `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start">
-      <div>
-        <div style="font-weight:600;font-size:13px">${c.name}</div>
-        <div style="font-size:12px;color:#64748b">${c.email}${c.tel ? ' · '+c.tel : ''}</div>
-        <div style="font-size:11px;color:#94a3b8;margin-top:2px">Kürzel: ${c.key}</div>
-      </div>
-      <div style="display:flex;gap:6px;flex-shrink:0;margin-left:8px">
-        <button class="btn btn-secondary" style="padding:4px 10px;font-size:12px" onclick="editKontakt('${ks}')">✏️</button>
-        <button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;color:#ef4444" onclick="deleteKontakt('${ks}')">🗑️</button>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function editKontakt(key) {
-  const c = getKontakte()[key];
-  if (!c) return;
-  document.getElementById('ko-edit-key').value = key;
-  document.getElementById('ko-key').value = c.key;
-  document.getElementById('ko-name').value = c.name;
-  document.getElementById('ko-email').value = c.email;
-  document.getElementById('ko-tel').value = c.tel || '';
-  document.getElementById('ko-form-title').textContent = 'Kontakt bearbeiten';
-}
-
-function deleteKontakt(key) {
-  const kos = getKontakte();
-  delete kos[key];
-  setKontakte(kos);
-  renderKontaktList();
-}
-
-function cancelKontaktEdit() {
-  document.getElementById('ko-edit-key').value = '';
-  document.getElementById('ko-key').value = '';
-  document.getElementById('ko-name').value = '';
-  document.getElementById('ko-email').value = '';
-  document.getElementById('ko-tel').value = '';
-  document.getElementById('ko-form-title').textContent = 'Neuer Kontakt';
-}
-
-function saveKontakt() {
-  const key   = document.getElementById('ko-key').value.trim();
-  const name  = document.getElementById('ko-name').value.trim();
-  const email = document.getElementById('ko-email').value.trim();
-  const tel   = document.getElementById('ko-tel').value.trim();
-  if (!key || !name || !email) { toast('Kürzel, Name und E-Mail sind Pflichtfelder','err'); return; }
-  const editKey = document.getElementById('ko-edit-key').value;
-  const kos = getKontakte();
-  if (editKey && editKey !== key) delete kos[editKey];
-  kos[key] = { key, name, email, tel };
-  setKontakte(kos);
-  cancelKontaktEdit();
-  renderKontaktList();
-  toast('Kontakt gespeichert ✓','ok');
-}
-
-// Öffnet einen Entwurf in der DESKTOP-Outlook-App (kein Browser, kein Login).
-// Das Dokument wird lokal erzeugt und an server.py geschickt, der es per
-// Outlook-COM als neuen, NICHT gesendeten Entwurf mit Anhang anzeigt.
-async function openDesktopOutlookDraft({ to, subject, body, blob, filename }) {
-  const fileBase64 = blob ? await blobToBase64(blob) : '';
-  let resp;
-  try {
-    resp = await fetch('/outlook-draft', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to, subject, body, filename, fileBase64 })
-    });
-  } catch(e) {
-    throw new Error('Lokaler Outlook-Dienst nicht erreichbar – bitte die App über start_app.bat starten.');
-  }
-  if (resp.status === 404 || resp.status === 501) {
-    throw new Error('Bitte App neu starten: das schwarze Fenster (start_app.bat) schließen und erneut öffnen.');
-  }
-  let result = {};
-  try { result = await resp.json(); } catch(e) {}
-  if (!resp.ok || !result.ok) {
-    throw new Error(result.error || ('Outlook-Entwurf fehlgeschlagen (HTTP ' + resp.status + ').'));
-  }
-}
-
-// Setzt den Status zuverlässig auf "Leistungsnachweis" (DB + lokaler State + offenes Modal)
-async function setStatusLeistungsnachweis() {
-  if (!cur) return false;
-  if (cur.status === 'Leistungsnachweis') return true; // schon gesetzt – nichts zu tun
-  const upd = { status: 'Leistungsnachweis', updated_at: new Date().toISOString() };
-  const { error: stErr } = await sb.from('auftraege').update(upd).eq('id', cur.id);
-  if (stErr) {
-    toast('Status konnte nicht gespeichert werden: ' + stErr.message, 'err');
-    return false;
-  }
-  // Lokalen State aktualisieren
-  Object.assign(cur, upd);
-  const idx = data.findIndex(r => r.id === cur.id);
-  if (idx >= 0) Object.assign(data[idx], upd);
-  // Offenes Büro-Detail-Modal sofort mitaktualisieren
-  const sel = document.getElementById('bd-status');
-  if (sel) sel.value = 'Leistungsnachweis';
-  const bdBadge = document.getElementById('bd-badge');
-  if (bdBadge) bdBadge.innerHTML = badge('Leistungsnachweis');
-  // Kartenliste & Statistik im Hintergrund neu rendern
-  renderBuero(); renderStats();
-  return true;
-}
-
-async function sendMailEntwurf() {
-  if (!cur) return;
-
-  // Kontakt für diesen Melder finden
-  const melderLine = (cur.melder||'').split('\n')[0].trim().toLowerCase();
-  const ko = Object.values(getKontakte()).find(k =>
-    melderLine.includes(k.key.toLowerCase()) || k.key.toLowerCase().includes(melderLine)
-  );
-  if (!ko) {
-    toast('Kein Kontakt für diesen Melder gefunden – bitte unter 📋 Kontakte hinterlegen.','err');
-    return;
-  }
-  // Betreff & Body
-  const subject = `Leistungsnachweis – ${cur.auftrag||''} – ${(cur.anschrift||'').split('\n')[0]}`;
-  const vorname = ko.name.split(' ')[0] || 'X';
-  const body = `Hallo ${vorname},\n\nanbei findest du den Leistungsnachweis für den erledigten Auftrag.\n\nBitte unterschreibe das Dokument und sende es uns anschließend zurück.\n\nDanke dir.\n\nViele Grüße\nService Team\n\nTel. 01556 / 6363222 | ${MAIL_FROM}\nWickerer Straße 33A | 65439 Flörsheim`;
-
-  try {
-    toast('PDF wird 1:1 aus der Word-Vorlage erstellt & Outlook geöffnet…','ok');
-    const baseName = 'Leistungsnachweis_'+(cur.auftrag||'Auftrag').replace(/[^\w-]/g,'_');
-    // PDF exakt aus der Word-Vorlage erzeugen (Graph-Konvertierung = 1:1 Layout)
-    const token   = await getGraphToken();
-    const wordBlob = await genWordLeistungsnachweis(true);
-    if (!wordBlob) { toast('Dokument konnte nicht erstellt werden','err'); return; }
-    const pdfBlob = await convertWordToPdf(token, wordBlob, baseName);
-
-    // Outlook-Entwurf öffnen – erst danach gilt der Schritt als erfolgreich
-    await openDesktopOutlookDraft({ to: ko.email, subject, body, blob: pdfBlob, filename: baseName + '.pdf' });
-
-    // ERST JETZT (PDF erstellt + Outlook-Entwurf geöffnet) Status setzen
-    await setStatusLeistungsnachweis();
-
-    // PDF gleichzeitig in OneDrive-Ordner "gesendet via outlook" speichern
-    const gesendetOrdner = ONEDRIVE_BASE + '/gesendet via outlook';
-    await ensureOneDriveFolder(token, gesendetOrdner);
-    await uploadToOneDrive(token, pdfBlob, `${gesendetOrdner}/${baseName}.pdf`);
-
-    toast(`✓ Status „Leistungsnachweis" gesetzt · Entwurf für ${ko.name} in Outlook geöffnet & PDF in OneDrive gespeichert`,'ok');
-  } catch(e) {
-    console.error(e);
-    toast('Fehler beim E-Mail-Entwurf: '+(e.message||e),'err');
-  }
-}
-
-// Init
-loadData();
-</script>
-
-<!-- Footer -->
-<div class="app-footer">
-  <div class="app-footer-brand">Service Team MA GmbH</div>
-  <div class="app-footer-info">Wickerer Str. 33A · 65439 Flörsheim · Tel. 01556 / 6363222</div>
-</div>
-</body>
-</html>
+        <button class="btn btn-secondary" style="padding:4px 10px;font-size:12px" onclick="editR
