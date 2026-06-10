@@ -547,7 +547,7 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 #4f46e5}
 <script>
 // ── Config ─────────────────────────────────────────────────────────────────
 const SB_URL = 'https://dzauqisqkkwsbouduuec.supabase.co';
-const SB_KEY = 'sb_publishable_wxXk85D1enG68N9X1zLpiQ_Hqf18uFO';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR6YXVxaXNxa2t3c2JvdWR1dWVjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAyMjA1NzksImV4cCI6MjA5NTc5NjU3OX0.t086O9w9KtrZWxC2lB6dQllwbpMgGUxFsa7ogA4Lvl4';
 const sb = supabase.createClient(SB_URL, SB_KEY);
 
 // ── Microsoft Graph / MSAL ─────────────────────────────────────────────────
@@ -2073,4 +2073,237 @@ function renderRAList() {
         <div style="font-size:11px;color:#94a3b8;margin-top:2px">Kürzel: ${r.key}</div>
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0;margin-left:8px">
-        <button class="btn btn-secondary" style="padding:4px 10px;font-size:12px" onclick="editR
+        <button class="btn btn-secondary" style="padding:4px 10px;font-size:12px" onclick="editRA('${ks}')">✏️</button>
+        <button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;color:#ef4444" onclick="deleteRA('${ks}')">🗑️</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function editRA(key) {
+  const r = getRAs()[key];
+  if (!r) return;
+  document.getElementById('ra-edit-key').value = key;
+  document.getElementById('ra-key').value = r.key;
+  document.getElementById('ra-name').value = r.name;
+  document.getElementById('ra-strasse').value = r.strasse;
+  document.getElementById('ra-plzort').value = r.plzOrt;
+  document.getElementById('ra-form-title').textContent = 'Adresse bearbeiten';
+}
+
+function deleteRA(key) {
+  const ras = getRAs();
+  delete ras[key];
+  setRAs(ras);
+  renderRAList();
+}
+
+function cancelRAEdit() {
+  document.getElementById('ra-edit-key').value = '';
+  document.getElementById('ra-key').value = '';
+  document.getElementById('ra-name').value = '';
+  document.getElementById('ra-strasse').value = '';
+  document.getElementById('ra-plzort').value = '';
+  document.getElementById('ra-form-title').textContent = 'Neue Adresse';
+}
+
+function saveRechnungsadresse() {
+  const key  = document.getElementById('ra-key').value.trim();
+  const name = document.getElementById('ra-name').value.trim();
+  const str  = document.getElementById('ra-strasse').value.trim();
+  const plz  = document.getElementById('ra-plzort').value.trim();
+  if (!key || !name) { toast('Kürzel und Name sind Pflichtfelder','err'); return; }
+  const editKey = document.getElementById('ra-edit-key').value;
+  const ras = getRAs();
+  if (editKey && editKey !== key) delete ras[editKey];
+  ras[key] = { key, name, strasse: str, plzOrt: plz };
+  setRAs(ras);
+  cancelRAEdit();
+  renderRAList();
+  toast('Adresse gespeichert ✓','ok');
+}
+
+// ── Kontakte ─────────────────────────────────────────────────────────────────
+const MAIL_FROM = 'info@serviceteam1.de';
+
+function getKontakte() { try { return JSON.parse(localStorage.getItem('st_kontakte')||'{}'); } catch(e) { return {}; } }
+function setKontakte(obj) { localStorage.setItem('st_kontakte', JSON.stringify(obj)); }
+
+function openKontakte() {
+  renderKontaktList();
+  cancelKontaktEdit();
+  document.getElementById('m-kontakte').classList.add('open');
+}
+
+function renderKontaktList() {
+  const kos = getKontakte();
+  const keys = Object.keys(kos);
+  const el = document.getElementById('ko-list');
+  if (!keys.length) {
+    el.innerHTML = '<div style="color:#94a3b8;font-size:13px;padding:8px 0">Noch keine Kontakte gespeichert.</div>';
+    return;
+  }
+  el.innerHTML = keys.map(k => {
+    const c = kos[k];
+    const ks = k.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div style="font-weight:600;font-size:13px">${c.name}</div>
+        <div style="font-size:12px;color:#64748b">${c.email}${c.tel ? ' · '+c.tel : ''}</div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:2px">Kürzel: ${c.key}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0;margin-left:8px">
+        <button class="btn btn-secondary" style="padding:4px 10px;font-size:12px" onclick="editKontakt('${ks}')">✏️</button>
+        <button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;color:#ef4444" onclick="deleteKontakt('${ks}')">🗑️</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function editKontakt(key) {
+  const c = getKontakte()[key];
+  if (!c) return;
+  document.getElementById('ko-edit-key').value = key;
+  document.getElementById('ko-key').value = c.key;
+  document.getElementById('ko-name').value = c.name;
+  document.getElementById('ko-email').value = c.email;
+  document.getElementById('ko-tel').value = c.tel || '';
+  document.getElementById('ko-form-title').textContent = 'Kontakt bearbeiten';
+}
+
+function deleteKontakt(key) {
+  const kos = getKontakte();
+  delete kos[key];
+  setKontakte(kos);
+  renderKontaktList();
+}
+
+function cancelKontaktEdit() {
+  document.getElementById('ko-edit-key').value = '';
+  document.getElementById('ko-key').value = '';
+  document.getElementById('ko-name').value = '';
+  document.getElementById('ko-email').value = '';
+  document.getElementById('ko-tel').value = '';
+  document.getElementById('ko-form-title').textContent = 'Neuer Kontakt';
+}
+
+function saveKontakt() {
+  const key   = document.getElementById('ko-key').value.trim();
+  const name  = document.getElementById('ko-name').value.trim();
+  const email = document.getElementById('ko-email').value.trim();
+  const tel   = document.getElementById('ko-tel').value.trim();
+  if (!key || !name || !email) { toast('Kürzel, Name und E-Mail sind Pflichtfelder','err'); return; }
+  const editKey = document.getElementById('ko-edit-key').value;
+  const kos = getKontakte();
+  if (editKey && editKey !== key) delete kos[editKey];
+  kos[key] = { key, name, email, tel };
+  setKontakte(kos);
+  cancelKontaktEdit();
+  renderKontaktList();
+  toast('Kontakt gespeichert ✓','ok');
+}
+
+// Öffnet einen Entwurf in der DESKTOP-Outlook-App (kein Browser, kein Login).
+// Das Dokument wird lokal erzeugt und an server.py geschickt, der es per
+// Outlook-COM als neuen, NICHT gesendeten Entwurf mit Anhang anzeigt.
+async function openDesktopOutlookDraft({ to, subject, body, blob, filename }) {
+  const fileBase64 = blob ? await blobToBase64(blob) : '';
+  let resp;
+  try {
+    resp = await fetch('/outlook-draft', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to, subject, body, filename, fileBase64 })
+    });
+  } catch(e) {
+    throw new Error('Lokaler Outlook-Dienst nicht erreichbar – bitte die App über start_app.bat starten.');
+  }
+  if (resp.status === 404 || resp.status === 501) {
+    throw new Error('Bitte App neu starten: das schwarze Fenster (start_app.bat) schließen und erneut öffnen.');
+  }
+  let result = {};
+  try { result = await resp.json(); } catch(e) {}
+  if (!resp.ok || !result.ok) {
+    throw new Error(result.error || ('Outlook-Entwurf fehlgeschlagen (HTTP ' + resp.status + ').'));
+  }
+}
+
+// Setzt den Status zuverlässig auf "Leistungsnachweis" (DB + lokaler State + offenes Modal)
+async function setStatusLeistungsnachweis() {
+  if (!cur) return false;
+  if (cur.status === 'Leistungsnachweis') return true; // schon gesetzt – nichts zu tun
+  const upd = { status: 'Leistungsnachweis', updated_at: new Date().toISOString() };
+  const { error: stErr } = await sb.from('auftraege').update(upd).eq('id', cur.id);
+  if (stErr) {
+    toast('Status konnte nicht gespeichert werden: ' + stErr.message, 'err');
+    return false;
+  }
+  // Lokalen State aktualisieren
+  Object.assign(cur, upd);
+  const idx = data.findIndex(r => r.id === cur.id);
+  if (idx >= 0) Object.assign(data[idx], upd);
+  // Offenes Büro-Detail-Modal sofort mitaktualisieren
+  const sel = document.getElementById('bd-status');
+  if (sel) sel.value = 'Leistungsnachweis';
+  const bdBadge = document.getElementById('bd-badge');
+  if (bdBadge) bdBadge.innerHTML = badge('Leistungsnachweis');
+  // Kartenliste & Statistik im Hintergrund neu rendern
+  renderBuero(); renderStats();
+  return true;
+}
+
+async function sendMailEntwurf() {
+  if (!cur) return;
+
+  // Kontakt für diesen Melder finden
+  const melderLine = (cur.melder||'').split('\n')[0].trim().toLowerCase();
+  const ko = Object.values(getKontakte()).find(k =>
+    melderLine.includes(k.key.toLowerCase()) || k.key.toLowerCase().includes(melderLine)
+  );
+  if (!ko) {
+    toast('Kein Kontakt für diesen Melder gefunden – bitte unter 📋 Kontakte hinterlegen.','err');
+    return;
+  }
+  // Betreff & Body
+  const subject = `Leistungsnachweis – ${cur.auftrag||''} – ${(cur.anschrift||'').split('\n')[0]}`;
+  const vorname = ko.name.split(' ')[0] || 'X';
+  const body = `Hallo ${vorname},\n\nanbei findest du den Leistungsnachweis für den erledigten Auftrag.\n\nBitte unterschreibe das Dokument und sende es uns anschließend zurück.\n\nDanke dir.\n\nViele Grüße\nService Team\n\nTel. 01556 / 6363222 | ${MAIL_FROM}\nWickerer Straße 33A | 65439 Flörsheim`;
+
+  try {
+    toast('PDF wird 1:1 aus der Word-Vorlage erstellt & Outlook geöffnet…','ok');
+    const baseName = 'Leistungsnachweis_'+(cur.auftrag||'Auftrag').replace(/[^\w-]/g,'_');
+    // PDF exakt aus der Word-Vorlage erzeugen (Graph-Konvertierung = 1:1 Layout)
+    const token   = await getGraphToken();
+    const wordBlob = await genWordLeistungsnachweis(true);
+    if (!wordBlob) { toast('Dokument konnte nicht erstellt werden','err'); return; }
+    const pdfBlob = await convertWordToPdf(token, wordBlob, baseName);
+
+    // Outlook-Entwurf öffnen – erst danach gilt der Schritt als erfolgreich
+    await openDesktopOutlookDraft({ to: ko.email, subject, body, blob: pdfBlob, filename: baseName + '.pdf' });
+
+    // ERST JETZT (PDF erstellt + Outlook-Entwurf geöffnet) Status setzen
+    await setStatusLeistungsnachweis();
+
+    // PDF gleichzeitig in OneDrive-Ordner "gesendet via outlook" speichern
+    const gesendetOrdner = ONEDRIVE_BASE + '/gesendet via outlook';
+    await ensureOneDriveFolder(token, gesendetOrdner);
+    await uploadToOneDrive(token, pdfBlob, `${gesendetOrdner}/${baseName}.pdf`);
+
+    toast(`✓ Status „Leistungsnachweis" gesetzt · Entwurf für ${ko.name} in Outlook geöffnet & PDF in OneDrive gespeichert`,'ok');
+  } catch(e) {
+    console.error(e);
+    toast('Fehler beim E-Mail-Entwurf: '+(e.message||e),'err');
+  }
+}
+
+// Init
+loadData();
+</script>
+
+<!-- Footer -->
+<div class="app-footer">
+  <div class="app-footer-brand">Service Team MA GmbH</div>
+  <div class="app-footer-info">Wickerer Str. 33A · 65439 Flörsheim · Tel. 01556 / 6363222</div>
+</div>
+</body>
+</html>
