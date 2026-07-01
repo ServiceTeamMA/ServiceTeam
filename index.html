@@ -169,6 +169,12 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 #4f46e5}
 .toast{position:fixed;bottom:88px;left:50%;transform:translateX(-50%) translateY(10px);background:#1e293b;color:#fff;padding:11px 20px;border-radius:10px;font-size:14px;z-index:1000;opacity:0;transition:all .3s;pointer-events:none;white-space:nowrap}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.ok{background:#065f46}.toast.err{background:#991b1b}
+.progress{position:fixed;bottom:88px;left:50%;transform:translateX(-50%) translateY(10px);background:#1e293b;color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;z-index:1001;opacity:0;transition:all .3s;pointer-events:none;display:flex;align-items:center;gap:10px;max-width:88%;box-shadow:var(--shadow-lg)}
+.progress.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.progress.ok{background:#065f46}.progress.err{background:#991b1b}
+.progress-spin{width:15px;height:15px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:progSpin .7s linear infinite;flex:0 0 auto}
+.progress.ok .progress-spin,.progress.err .progress-spin{display:none}
+@keyframes progSpin{to{transform:rotate(360deg)}}
 
 /* ── Section divider ── */
 .section-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:18px 0 8px;padding-bottom:6px;border-bottom:1px solid var(--border)}
@@ -311,6 +317,23 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 #4f46e5}
       </div>
       <div id="d-stunden-info" style="margin-top:6px;font-size:13px;font-weight:700;color:var(--primary);min-height:18px"></div>
     </div>
+    <!-- MDB: Einsatzort/Objektidentifikation nachtragen (nur bei MDB-Aufträgen sichtbar) -->
+    <div id="d-mdb-section" style="display:none;border:1.5px solid var(--primary-l);border-radius:10px;padding:12px;margin-bottom:14px;background:var(--primary-xl)">
+      <div style="font-size:12px;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">🏠 Einsatzort (MDB → Objektidentifikation) *</div>
+      <div class="fg" style="position:relative;margin-bottom:8px">
+        <label>Adresse suchen</label>
+        <input type="text" id="d-mdb-search" autocomplete="off" placeholder="🔍 Straße, Hausnummer oder Ort…"
+               oninput="mdbSearch('d')" onfocus="mdbSearch('d')" onkeydown="mdbSearchKeydown('d',event)">
+        <div id="d-mdb-dd" class="mdb-dd"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="fg"><label>Geschoss</label>
+          <select id="d-mdb-geschoss" onchange="mdbGeschossChange('d')" disabled><option value="">– zuerst Adresse wählen –</option></select></div>
+        <div class="fg"><label>Wohnung / Lage</label>
+          <select id="d-mdb-wohnung" onchange="mdbWohnungChange('d')" disabled><option value="">– zuerst Geschoss wählen –</option></select></div>
+      </div>
+      <div id="d-mdb-result" style="font-size:12px;color:var(--muted);margin-top:2px"></div>
+    </div>
     <div class="fg">
       <label>Tätigkeit</label>
       <textarea id="d-taetigkeit" placeholder="Beschreibe die durchgeführten Tätigkeiten…"></textarea>
@@ -406,21 +429,21 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 #4f46e5}
     </div>
     <div class="fg"><label>Auftragsnummer *</label><input type="text" id="n-auftrag" oninput="mdbAutoFill()" placeholder="z.B. Auftrag 8001220284"></div>
     <div class="fg"><label>Datum</label><input type="date" id="n-datum"></div>
-    <div class="fg"><label>Anschrift</label><textarea id="n-anschrift" placeholder="Straße Nr&#10;PLZ Ort&#10;Etage&#10;Whg: …"></textarea></div>
+    <div class="fg"><label>Anschrift</label><textarea id="n-anschrift" oninput="mdbAnschriftSync()" placeholder="Straße Nr&#10;PLZ Ort&#10;Etage&#10;Whg: …"></textarea></div>
     <!-- MDB: Einsatzort aus Mieterliste (BKR/WE/MO) – nur bei MDB-Aufträgen sichtbar -->
     <div id="n-mdb-section" style="display:none;border:1.5px solid var(--primary-l);border-radius:10px;padding:12px;margin-bottom:14px;background:var(--primary-xl)">
       <div style="font-size:12px;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">🏠 Einsatzort (MDB → Objektidentifikation)</div>
       <div class="fg" style="position:relative;margin-bottom:8px">
         <label>Adresse suchen</label>
         <input type="text" id="n-mdb-search" autocomplete="off" placeholder="🔍 Straße, Hausnummer oder Ort…"
-               oninput="mdbSearch()" onfocus="mdbSearch()" onkeydown="mdbSearchKeydown(event)">
+               oninput="_mdbSearchTouched=true;mdbSearch('n')" onfocus="mdbSearch('n')" onkeydown="mdbSearchKeydown('n',event)">
         <div id="n-mdb-dd" class="mdb-dd"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="fg"><label>Geschoss</label>
-          <select id="n-mdb-geschoss" onchange="mdbGeschossChange()" disabled><option value="">– zuerst Adresse wählen –</option></select></div>
+          <select id="n-mdb-geschoss" onchange="mdbGeschossChange('n')" disabled><option value="">– zuerst Adresse wählen –</option></select></div>
         <div class="fg"><label>Wohnung / Lage</label>
-          <select id="n-mdb-wohnung" onchange="mdbWohnungChange()" disabled><option value="">– zuerst Geschoss wählen –</option></select></div>
+          <select id="n-mdb-wohnung" onchange="mdbWohnungChange('n')" disabled><option value="">– zuerst Geschoss wählen –</option></select></div>
       </div>
       <div id="n-mdb-result" style="font-size:12px;color:var(--muted);margin-top:2px"></div>
     </div>
@@ -606,6 +629,7 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 #4f46e5}
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="progress" id="progress"><span class="progress-spin"></span><span id="progress-txt"></span></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://unpkg.com/@azure/msal-browser@2.38.3/lib/msal-browser.min.js"></script>
@@ -841,24 +865,27 @@ async function saveToOneDrive(typ) {
     const token = await getGraphToken();
 
     if (typ === 'word') {
-      toast('Word wird in OneDrive gespeichert…', 'ok');
+      progressStart('Word-Dokument wird erstellt…');
       await ensureOneDriveFolder(token, ONEDRIVE_BASE + '/Word');
       const wordBlob = await genWordLeistungsnachweis(true);
-      if (!wordBlob) return;
+      if (!wordBlob) { progressFail('Dokument konnte nicht erstellt werden'); return; }
+      progressStep('Word-Dokument wird in OneDrive gespeichert…');
       await uploadToOneDrive(token, wordBlob, `${ONEDRIVE_BASE}/Word/${baseName}.docx`);
-      toast('✓ Word gespeichert → Leistungsnachweise/Word', 'ok');
+      progressDone('Word Dokument wurde im Ordner abgespeichert.');
     } else {
-      toast('PDF wird 1:1 aus der Word-Vorlage erstellt & in OneDrive gespeichert…', 'ok');
+      progressStart('Word-Dokument wird erstellt…');
       await ensureOneDriveFolder(token, ONEDRIVE_BASE + '/PDF');
       const wordBlob = await genWordLeistungsnachweis(true);
-      if (!wordBlob) return;
+      if (!wordBlob) { progressFail('Dokument konnte nicht erstellt werden'); return; }
+      progressStep('PDF wird erstellt…');
       const pdfBlob = await convertWordToPdf(token, wordBlob, baseName);
+      progressStep('PDF wird in OneDrive gespeichert…');
       await uploadToOneDrive(token, pdfBlob, `${ONEDRIVE_BASE}/PDF/${baseName}.pdf`);
-      toast('✓ PDF gespeichert → Leistungsnachweise/PDF', 'ok');
+      progressDone('PDF Dokument wurde im Ordner abgespeichert.');
     }
   } catch(e) {
     console.error('saveToOneDrive failed:', e);
-    toast('Fehler: ' + (e.message || e.errorCode || e), 'err');
+    progressFail('Fehler: ' + (e.message || e.errorCode || e));
   }
 }
 
@@ -1373,6 +1400,13 @@ async function openDetail(id) {
     if(einsatz.sigs.mieter) setTimeout(()=>drawSigFromData('d-sig-mieter',einsatz.sigs.mieter),100);
   }
 
+  // MDB: Objekt-Section nur bei MDB-Aufträgen zeigen und bestehende Auswahl vorbelegen.
+  // Immer zuerst zurücksetzen, damit keine Auswahl aus einem zuvor geöffneten Auftrag hängen bleibt.
+  const istMDBd = (cur.auftrag||'').trim().toUpperCase().startsWith('MDB');
+  toggleMdbSection('d', istMDBd);
+  resetMdbSelection('d');
+  if(istMDBd) mdbPrefillDetail();
+
   const addrEncoded = encodeURIComponent((cur.anschrift||'').replace(/\n/g,', '));
   const navBtn = cur.anschrift
     ? `<button onclick="navigateTo('${(cur.anschrift||'').replace(/\n/g,', ').replace(/'/g,"\\'")}');event.stopPropagation()"
@@ -1424,6 +1458,16 @@ async function uploadAll() {
 async function saveDetail() {
   if(!cur) return;
   const btn=document.getElementById('d-save-btn');
+  // MDB: Objekt-Auswahl ist beim Speichern Pflicht – VOLLSTÄNDIG (Adresse + Geschoss + Wohnung/Lage).
+  // Gültig ist: eine vollständige Auswahl im Detail (_mdbSel.d.row) ODER ein bereits am Auftrag
+  // gespeichertes Objekt (cur.bkr), das nicht gerade angefangen wurde zu ändern (_mdbSel.d.building).
+  const istMDBd=(cur.auftrag||'').trim().toUpperCase().startsWith('MDB');
+  if(istMDBd && !_mdbSel.d.row && (!cur.bkr || _mdbSel.d.building)){
+    toast('Bitte Einsatzort vollständig wählen: Adresse, Geschoss und Wohnung/Lage','err');
+    const sec=document.getElementById('d-mdb-section'); if(sec) sec.scrollIntoView({behavior:'smooth',block:'center'});
+    const w=document.getElementById('d-mdb-wohnung'); if(w && !w.disabled) w.focus();
+    return;
+  }
   btn.disabled=true; btn.textContent='Speichern…';
   try {
     const bilder = await uploadAll();
@@ -1446,6 +1490,12 @@ async function saveDetail() {
       bilder,
       updated_at: new Date().toISOString()
     };
+    // MDB: im Detail (neu) gewählte Objektidentifikation mitspeichern
+    if(_mdbSel.d.row){
+      const r=_mdbSel.d.row;
+      upd.bkr=r.bkr||null; upd.we=r.we||null; upd.mo=r.mo||null;
+      upd.geschoss=r.geschoss||null; upd.lage=r.lage||null;
+    }
     const {error}=await sb.from('auftraege').update(upd).eq('id',cur.id);
     if(error) throw error;
     Object.assign(cur,upd);
@@ -1478,27 +1528,45 @@ function mdbAutoFill() {
     if (_mdbAF.mel && melEl.value.trim() === 'MDB') melEl.value = '';
     _mdbAF.ag = false; _mdbAF.mel = false;
   }
-  toggleMdbSection(istMDB);
+  toggleMdbSection('n', istMDB);
+  if(istMDB) mdbAnschriftSync();   // beim Aktivieren direkt aus der Anschrift vorbelegen
 }
 
 // ── MDB-Einsatzort-Auswahl (Adress-Suche → Geschoss → Wohnung → BKR/WE/MO) ──
-let _mdbRow = null;                    // aktuell gewählte mieterliste-Zeile (final)
-let _mdbBuilding = null;               // {ort,strasse,hausnummer}
-function toggleMdbSection(show) {
-  const sec = document.getElementById('n-mdb-section');
+// Wird in zwei Masken genutzt: Präfix 'n' = Neuer Auftrag, 'd' = Fall bearbeiten (Detail).
+let _mdbSel = { n:{row:null,building:null}, d:{row:null,building:null} };
+let _mdbSearchTouched = false;         // Feature 1: manuelle Sucheingabe (nur 'n') hat Vorrang
+function mdbEl(pfx, suffix){ return document.getElementById(pfx+'-mdb-'+suffix); }
+function toggleMdbSection(pfx, show) {
+  const sec = document.getElementById(pfx+'-mdb-section');
   if (!sec) return;
   sec.style.display = show ? 'block' : 'none';
-  if (!show) resetMdbSelection();
+  if (!show) resetMdbSelection(pfx);
 }
-function resetMdbSelection() {
-  _mdbRow = null; _mdbBuilding = null;
-  const s=document.getElementById('n-mdb-search'); if(s) s.value='';
-  const dd=document.getElementById('n-mdb-dd'); if(dd){ dd.innerHTML=''; dd.classList.remove('open'); }
-  const g=document.getElementById('n-mdb-geschoss');
+function resetMdbSelection(pfx) {
+  _mdbSel[pfx] = {row:null, building:null};
+  if(pfx==='n') _mdbSearchTouched=false;
+  const s=mdbEl(pfx,'search'); if(s) s.value='';
+  const dd=mdbEl(pfx,'dd'); if(dd){ dd.innerHTML=''; dd.classList.remove('open'); }
+  const g=mdbEl(pfx,'geschoss');
   if(g){ g.innerHTML='<option value="">– zuerst Adresse wählen –</option>'; g.disabled=true; }
-  const w=document.getElementById('n-mdb-wohnung');
+  const w=mdbEl(pfx,'wohnung');
   if(w){ w.innerHTML='<option value="">– zuerst Geschoss wählen –</option>'; w.disabled=true; }
-  const r=document.getElementById('n-mdb-result'); if(r) r.textContent='';
+  const r=mdbEl(pfx,'result'); if(r) r.textContent='';
+}
+// Feature 1: Anschrift-Eingabe im Neuer-Auftrag-Modal befüllt die MDB-Suche vor und filtert
+// die Treffer – aber nur solange der Nutzer das Suchfeld noch nicht selbst angefasst hat.
+function mdbAnschriftSync(){
+  const sec=document.getElementById('n-mdb-section');
+  if(!sec || sec.style.display==='none') return;   // nur bei sichtbarer MDB-Section
+  if(_mdbSearchTouched) return;                     // manuelle Eingabe/Auswahl hat Vorrang
+  const an=document.getElementById('n-anschrift').value;
+  // Adresstext ohne 5-stellige PLZ (PLZ steht nicht in der Mieterliste → würde alle Treffer filtern)
+  const q=an.replace(/\r?\n/g,' ').replace(/\b\d{5}\b/g,' ').replace(/\s+/g,' ').trim();
+  const s=document.getElementById('n-mdb-search');
+  s.value=q;
+  if(q){ mdbSearch('n'); }
+  else { const dd=document.getElementById('n-mdb-dd'); if(dd){ dd.innerHTML=''; dd.classList.remove('open'); } }
 }
 // Geschoss-Sortierung (EG < 1.OG < … < ZG < Staffel < Dach)
 function mdbGeschossRank(g){
@@ -1511,9 +1579,17 @@ function mdbGeschossRank(g){
   if(g.includes('dach'))    return 91;
   return 95;
 }
-function mdbSearch(){
-  const dd=document.getElementById('n-mdb-dd');
-  const q=document.getElementById('n-mdb-search').value.trim().toLowerCase();
+function mdbNorm(s){
+  // Adress-Normalisierung: erlaubt Treffer trotz Abkürzungen (str./straße/strasse) & Punkten
+  return (s||'').toLowerCase()
+    .replace(/ß/g,'ss')
+    .replace(/\./g,' ')
+    .replace(/strasse|straße/g,'str')
+    .replace(/\s+/g,' ').trim();
+}
+function mdbSearch(pfx){
+  const dd=mdbEl(pfx,'dd');
+  const q=mdbNorm(mdbEl(pfx,'search').value);
   // eindeutige Gebäude (ort+strasse+hausnummer) aus dem Cache
   const seen=new Map();
   for(const r of _mieterCache){
@@ -1524,7 +1600,7 @@ function mdbSearch(){
   if(q){
     const terms=q.split(/\s+/).filter(Boolean);
     buildings=buildings.filter(b=>{
-      const hay=((b.strasse||'')+' '+(b.hausnummer||'')+' '+(b.ort||'')).toLowerCase();
+      const hay=mdbNorm((b.strasse||'')+' '+(b.hausnummer||'')+' '+(b.ort||''));
       return terms.every(t=>hay.includes(t));
     });
   }
@@ -1534,38 +1610,41 @@ function mdbSearch(){
   if(!shown.length){
     dd.innerHTML='<div class="mdb-dd-empty">Keine Adresse gefunden.</div>';
   } else {
-    dd.innerHTML=shown.map(b=>`<div class="mdb-dd-item" onclick="mdbPickBuilding('${escAttr(b.ort)}','${escAttr(b.strasse)}','${escAttr(b.hausnummer)}')">${escAttr(b.strasse)} ${escAttr(b.hausnummer)} <span style="color:#94a3b8">· ${escAttr(b.ort)}</span></div>`).join('')
+    dd.innerHTML=shown.map(b=>`<div class="mdb-dd-item" onclick="mdbPickBuilding('${pfx}','${escAttr(b.ort)}','${escAttr(b.strasse)}','${escAttr(b.hausnummer)}')">${escAttr(b.strasse)} ${escAttr(b.hausnummer)} <span style="color:#94a3b8">· ${escAttr(b.ort)}</span></div>`).join('')
       + (buildings.length>shown.length?`<div class="mdb-dd-empty">… ${buildings.length-shown.length} weitere – Suche verfeinern.</div>`:'');
   }
   dd.classList.add('open');
 }
-function mdbSearchKeydown(e){
-  if(e.key==='Escape'){ document.getElementById('n-mdb-dd').classList.remove('open'); e.stopPropagation(); }
+function mdbSearchKeydown(pfx,e){
+  if(e.key==='Escape'){ mdbEl(pfx,'dd').classList.remove('open'); e.stopPropagation(); }
 }
-function mdbPickBuilding(ort,strasse,hausnummer){
-  _mdbBuilding={ort,strasse,hausnummer}; _mdbRow=null;
-  document.getElementById('n-mdb-search').value=strasse+' '+hausnummer+', '+ort;
-  document.getElementById('n-mdb-dd').classList.remove('open');
+function mdbPickBuilding(pfx,ort,strasse,hausnummer){
+  _mdbSel[pfx]={building:{ort,strasse,hausnummer}, row:null};
+  if(pfx==='n') _mdbSearchTouched=true;   // Auswahl getroffen → Anschrift-Sync nicht mehr überschreiben
+  mdbEl(pfx,'search').value=strasse+' '+hausnummer+', '+ort;
+  mdbEl(pfx,'dd').classList.remove('open');
   // Geschosse dieses Gebäudes (eindeutig, sortiert)
   const rows=_mieterCache.filter(r=>r.ort===ort&&r.strasse===strasse&&r.hausnummer===hausnummer);
   const gs=[...new Set(rows.map(r=>r.geschoss||''))].sort((a,b)=>mdbGeschossRank(a)-mdbGeschossRank(b)||a.localeCompare(b,'de'));
-  const g=document.getElementById('n-mdb-geschoss');
+  const g=mdbEl(pfx,'geschoss');
   g.innerHTML='<option value="">– Geschoss wählen –</option>'+gs.map(x=>`<option value="${escAttr(x)}">${escAttr(x)}</option>`).join('');
   g.disabled=false;
-  const w=document.getElementById('n-mdb-wohnung');
+  const w=mdbEl(pfx,'wohnung');
   w.innerHTML='<option value="">– zuerst Geschoss wählen –</option>'; w.disabled=true;
-  document.getElementById('n-mdb-result').textContent='';
-  // Anschrift (falls leer) vorbefüllen – PLZ ist in der Liste nicht enthalten
-  const an=document.getElementById('n-anschrift');
-  if(an && !an.value.trim()) an.value=strasse+' '+hausnummer+'\n'+ort;
+  mdbEl(pfx,'result').textContent='';
+  // Anschrift (falls leer) nur im Neuer-Auftrag-Modal vorbefüllen – PLZ ist in der Liste nicht enthalten
+  if(pfx==='n'){
+    const an=document.getElementById('n-anschrift');
+    if(an && !an.value.trim()) an.value=strasse+' '+hausnummer+'\n'+ort;
+  }
 }
-function mdbGeschossChange(){
-  _mdbRow=null;
-  const g=document.getElementById('n-mdb-geschoss').value;
-  const w=document.getElementById('n-mdb-wohnung');
-  document.getElementById('n-mdb-result').textContent='';
-  if(!_mdbBuilding||!g){ w.innerHTML='<option value="">– zuerst Geschoss wählen –</option>'; w.disabled=true; return; }
-  const b=_mdbBuilding;
+function mdbGeschossChange(pfx){
+  _mdbSel[pfx].row=null;
+  const g=mdbEl(pfx,'geschoss').value;
+  const w=mdbEl(pfx,'wohnung');
+  mdbEl(pfx,'result').textContent='';
+  const b=_mdbSel[pfx].building;
+  if(!b||!g){ w.innerHTML='<option value="">– zuerst Geschoss wählen –</option>'; w.disabled=true; return; }
   const rows=_mieterCache.filter(r=>r.ort===b.ort&&r.strasse===b.strasse&&r.hausnummer===b.hausnummer&&r.geschoss===g);
   // Lage-Doppelungen (die 12 Fälle) mit MO unterscheiden
   const lageCount={}; rows.forEach(r=>{lageCount[r.lage]=(lageCount[r.lage]||0)+1;});
@@ -1581,11 +1660,38 @@ function objektStr(r, sep){
   sep = sep || ' · ';
   return ['BKR '+r.bkr,'WE '+r.we,'MO '+r.mo, r.geschoss, r.lage].join(sep);
 }
-function mdbWohnungChange(){
-  const id=document.getElementById('n-mdb-wohnung').value;
-  const res=document.getElementById('n-mdb-result');
-  _mdbRow=id?_mieterCache.find(r=>String(r.id)===String(id))||null:null;
-  res.textContent=_mdbRow?`✓ BKR ${_mdbRow.bkr} · WE ${_mdbRow.we} · MO ${_mdbRow.mo} · ${_mdbRow.geschoss} · ${_mdbRow.lage}`:'';
+function mdbWohnungChange(pfx){
+  const id=mdbEl(pfx,'wohnung').value;
+  const res=mdbEl(pfx,'result');
+  const row=id?_mieterCache.find(r=>String(r.id)===String(id))||null:null;
+  _mdbSel[pfx].row=row;
+  res.textContent=row?`✓ BKR ${row.bkr} · WE ${row.we} · MO ${row.mo} · ${row.geschoss} · ${row.lage}`:'';
+}
+// Detail-Maske: Objektauswahl vorbelegen.
+// (a) Vollständiges Objekt am Auftrag (bkr/we/mo) → Adresse+Geschoss+Wohnung setzen.
+// (b) Nur Straße bekannt (aus der Anschrift, z.B. beim Erfassen nur Gebäude gewählt) → Gebäude
+//     übernehmen; Geschoss/Wohnung muss das Team noch ergänzen (Pflicht beim Speichern).
+function mdbPrefillDetail(){
+  const res=mdbEl('d','result');
+  if(cur && cur.bkr){
+    const row=_mieterCache.find(r=>String(r.bkr)===String(cur.bkr)&&String(r.we)===String(cur.we)&&String(r.mo)===String(cur.mo));
+    if(row){
+      mdbPickBuilding('d', row.ort, row.strasse, row.hausnummer);
+      const g=mdbEl('d','geschoss'); g.value=row.geschoss||''; mdbGeschossChange('d');
+      const w=mdbEl('d','wohnung'); w.value=String(row.id); mdbWohnungChange('d');
+    } else if(res){ res.textContent='Aktuell: '+objektStr(cur); }
+    return;
+  }
+  // (b) Straße aus der Anschrift (erste Zeile, ohne PLZ) übernehmen
+  if(cur && cur.anschrift){
+    const firstLine=(cur.anschrift.split('\n')[0]||'').replace(/\b\d{5}\b/g,' ').trim();
+    if(firstLine){
+      const s=mdbEl('d','search'); s.value=firstLine; mdbSearch('d');
+      const items=mdbEl('d','dd').querySelectorAll('.mdb-dd-item');
+      if(items.length===1){ items[0].click(); }        // genau ein Gebäude → automatisch wählen
+      else { mdbEl('d','dd').classList.remove('open'); } // sonst Vorschlag geschlossen lassen
+    }
+  }
 }
 
 function openNew() {
@@ -1593,7 +1699,7 @@ function openNew() {
   document.getElementById('n-datum').value=new Date().toISOString().split('T')[0];
   document.getElementById('n-status').value='Offen';
   _mdbAF = { ag:false, mel:false };
-  toggleMdbSection(false);
+  toggleMdbSection('n', false);
   document.getElementById('m-new').classList.add('open');
 }
 
@@ -1614,9 +1720,10 @@ async function saveNew() {
     status:document.getElementById('n-status').value,
   };
   // MDB: Objektidentifikation aus der Einsatzort-Auswahl übernehmen
-  if(_mdbRow){
-    row.bkr=_mdbRow.bkr||null; row.we=_mdbRow.we||null; row.mo=_mdbRow.mo||null;
-    row.geschoss=_mdbRow.geschoss||null; row.lage=_mdbRow.lage||null;
+  const nr=_mdbSel.n.row;
+  if(nr){
+    row.bkr=nr.bkr||null; row.we=nr.we||null; row.mo=nr.mo||null;
+    row.geschoss=nr.geschoss||null; row.lage=nr.lage||null;
   }
   const {data:ins,error}=await sb.from('auftraege').insert([row]).select();
   if(error){toast('Fehler: '+error.message,'err');return;}
@@ -1667,6 +1774,26 @@ function toast(msg,type=''){
   setTimeout(()=>el.className='toast',3000);
 }
 
+// Klebende Fortschrittsanzeige (bleibt sichtbar, bis abgeschlossen) – für längere
+// Vorgänge wie Word/PDF-Erstellung & OneDrive-Upload & Outlook-Entwurf.
+let _progTimer=null;
+function _progSet(msg,cls){
+  const el=document.getElementById('progress');
+  document.getElementById('progress-txt').textContent=msg;
+  el.className='progress show'+(cls?' '+cls:'');
+  if(_progTimer){ clearTimeout(_progTimer); _progTimer=null; }
+}
+function progressStart(msg){ _progSet(msg,''); }
+function progressStep(msg){ _progSet(msg,''); }
+function progressDone(msg){
+  _progSet(msg,'ok');
+  _progTimer=setTimeout(()=>{document.getElementById('progress').className='progress';},4000);
+}
+function progressFail(msg){
+  _progSet(msg,'err');
+  _progTimer=setTimeout(()=>{document.getElementById('progress').className='progress';},5000);
+}
+
 // Close on backdrop click
 document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{
   if(e.target===o && o.id!=='m-leistung') o.classList.remove('open');
@@ -1685,9 +1812,11 @@ document.addEventListener('keydown',e=>{
 // Material-Such-Dropdown schließen, wenn außerhalb geklickt wird
 document.addEventListener('click',e=>{
   if(!e.target.closest('.d-mat-search') && !e.target.closest('.d-mat-dd')) closeAllMatDropdowns();
-  if(!e.target.closest('#n-mdb-search') && !e.target.closest('#n-mdb-dd')){
-    const dd=document.getElementById('n-mdb-dd'); if(dd) dd.classList.remove('open');
-  }
+  ['n','d'].forEach(pfx=>{
+    if(!e.target.closest('#'+pfx+'-mdb-search') && !e.target.closest('#'+pfx+'-mdb-dd')){
+      const dd=document.getElementById(pfx+'-mdb-dd'); if(dd) dd.classList.remove('open');
+    }
+  });
 });
 
 // ── Leistungsnachweis ────────────────────────────────────────────────────────
@@ -2836,29 +2965,31 @@ async function sendMailEntwurf() {
   const body = `Hallo ${vorname},\n\nanbei findest du den Leistungsnachweis für den erledigten Auftrag.\n\nBitte unterschreibe das Dokument und sende es uns anschließend zurück.\n\nDanke dir.\n\nViele Grüße\nService Team\n\nTel. 01556 / 6363222 | ${MAIL_FROM}\nWickerer Straße 33A | 65439 Flörsheim`;
 
   try {
-    toast('PDF wird 1:1 aus der Word-Vorlage erstellt & Outlook geöffnet…','ok');
+    progressStart('PDF wird erstellt…');
     const baseName = 'Leistungsnachweis_'+(cur.auftrag||'Auftrag').replace(/[^\w-]/g,'_');
     // PDF exakt aus der Word-Vorlage erzeugen (Graph-Konvertierung = 1:1 Layout)
     const token   = await getGraphToken();
     const wordBlob = await genWordLeistungsnachweis(true);
-    if (!wordBlob) { toast('Dokument konnte nicht erstellt werden','err'); return; }
+    if (!wordBlob) { progressFail('Dokument konnte nicht erstellt werden'); return; }
     const pdfBlob = await convertWordToPdf(token, wordBlob, baseName);
 
     // Outlook-Entwurf öffnen – erst danach gilt der Schritt als erfolgreich
+    progressStep('E-Mail-Entwurf wird in Outlook geöffnet…');
     await openDesktopOutlookDraft({ to: ko.email, subject, body, blob: pdfBlob, filename: baseName + '.pdf' });
 
     // ERST JETZT (PDF erstellt + Outlook-Entwurf geöffnet) Status setzen
     await setStatusLeistungsnachweis();
 
     // PDF gleichzeitig in OneDrive-Ordner "gesendet via outlook" speichern
+    progressStep('PDF wird in OneDrive gespeichert…');
     const gesendetOrdner = ONEDRIVE_BASE + '/gesendet via outlook';
     await ensureOneDriveFolder(token, gesendetOrdner);
     await uploadToOneDrive(token, pdfBlob, `${gesendetOrdner}/${baseName}.pdf`);
 
-    toast(`✓ Status „Leistungsnachweis" gesetzt · Entwurf für ${ko.name} in Outlook geöffnet & PDF in OneDrive gespeichert`,'ok');
+    progressDone('E-Mail Entwurf wurde erstellt.');
   } catch(e) {
     console.error(e);
-    toast('Fehler beim E-Mail-Entwurf: '+(e.message||e),'err');
+    progressFail('Fehler beim E-Mail-Entwurf: '+(e.message||e));
   }
 }
 
