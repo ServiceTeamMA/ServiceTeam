@@ -189,6 +189,12 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 #4f46e5}
 .d-mat-dd-free{font-weight:600;color:var(--primary);position:sticky;top:0;background:#fff;border-bottom:1.5px solid var(--border)}
 .d-mat-dd-free:hover{background:var(--primary-xl)}
 .d-mat-dd-empty{padding:10px 11px;font-size:12px;color:var(--muted);line-height:1.4}
+.mdb-dd{display:none;position:absolute;left:0;right:0;z-index:50;margin-top:2px;border:1.5px solid var(--primary-l);border-radius:8px;background:#fff;max-height:260px;overflow-y:auto;box-shadow:var(--shadow-lg);-webkit-overflow-scrolling:touch}
+.mdb-dd.open{display:block}
+.mdb-dd-item{padding:9px 11px;font-size:13px;cursor:pointer;border-bottom:1px solid #f3f4f6;line-height:1.3}
+.mdb-dd-item:last-child{border-bottom:none}
+.mdb-dd-item:hover,.mdb-dd-item:active{background:var(--primary-xl)}
+.mdb-dd-empty{padding:10px 11px;font-size:12px;color:var(--muted);line-height:1.4}
 .ln-preview{background:var(--primary-xl);border-radius:10px;padding:12px 14px;margin:14px 0;border:1px solid #c7d2fe}
 .ln-preview-row{display:flex;justify-content:space-between;font-size:13px;padding:3px 0}
 .ln-preview-total{font-weight:700;font-size:14px;border-top:2px solid var(--primary-l);padding-top:8px;margin-top:4px}
@@ -217,6 +223,7 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 #4f46e5}
   <div class="header-right">
     <button class="icon-btn" onclick="openKontakte()">📋 Kontakte</button>
     <button class="icon-btn" onclick="openRechnungsadressen()">🏢 Adressen</button>
+    <button class="icon-btn" onclick="openMieterliste()">🏠 Mieterliste</button>
     <select class="year-select" id="yearSelect" onchange="onYearChange()">
       <option value="2026">Aufträge 2026</option>
       <option value="2027">Aufträge 2027</option>
@@ -400,6 +407,23 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 #4f46e5}
     <div class="fg"><label>Auftragsnummer *</label><input type="text" id="n-auftrag" oninput="mdbAutoFill()" placeholder="z.B. Auftrag 8001220284"></div>
     <div class="fg"><label>Datum</label><input type="date" id="n-datum"></div>
     <div class="fg"><label>Anschrift</label><textarea id="n-anschrift" placeholder="Straße Nr&#10;PLZ Ort&#10;Etage&#10;Whg: …"></textarea></div>
+    <!-- MDB: Einsatzort aus Mieterliste (BKR/WE/MO) – nur bei MDB-Aufträgen sichtbar -->
+    <div id="n-mdb-section" style="display:none;border:1.5px solid var(--primary-l);border-radius:10px;padding:12px;margin-bottom:14px;background:var(--primary-xl)">
+      <div style="font-size:12px;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">🏠 Einsatzort (MDB → Objektidentifikation)</div>
+      <div class="fg" style="position:relative;margin-bottom:8px">
+        <label>Adresse suchen</label>
+        <input type="text" id="n-mdb-search" autocomplete="off" placeholder="🔍 Straße, Hausnummer oder Ort…"
+               oninput="mdbSearch()" onfocus="mdbSearch()" onkeydown="mdbSearchKeydown(event)">
+        <div id="n-mdb-dd" class="mdb-dd"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="fg"><label>Geschoss</label>
+          <select id="n-mdb-geschoss" onchange="mdbGeschossChange()" disabled><option value="">– zuerst Adresse wählen –</option></select></div>
+        <div class="fg"><label>Wohnung / Lage</label>
+          <select id="n-mdb-wohnung" onchange="mdbWohnungChange()" disabled><option value="">– zuerst Geschoss wählen –</option></select></div>
+      </div>
+      <div id="n-mdb-result" style="font-size:12px;color:var(--muted);margin-top:2px"></div>
+    </div>
     <div class="fg"><label>Beschreibung</label><textarea id="n-beschreibung" placeholder="Was ist zu tun?"></textarea></div>
     <div class="fg"><label>Auftraggeber</label><textarea id="n-auftraggeber" placeholder="Firmenname&#10;Adresse&#10;Tel"></textarea></div>
     <div class="fg"><label>Mieter</label><textarea id="n-mieter" placeholder="Name&#10;Telefon&#10;E-Mail"></textarea></div>
@@ -544,6 +568,43 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 #4f46e5}
   </div>
 </div>
 
+<!-- ══ MIETERLISTE MODAL (MDB Objektidentifikation) ══ -->
+<div class="overlay" id="m-mieterliste">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-hd">
+      <div>
+        <h2 style="margin:0">Mieterliste (MDB)</h2>
+        <div style="font-size:12px;color:#64748b;margin-top:4px">Adresse → BKR / WE / MO für die Einsatzort-Auswahl bei MDB-Aufträgen</div>
+      </div>
+      <button class="modal-close" onclick="closeModal('m-mieterliste')">✕</button>
+    </div>
+    <div class="fg" style="margin-top:4px">
+      <input type="text" id="mi-search" autocomplete="off" placeholder="🔍 Ort, Straße oder Hausnummer suchen…" oninput="renderMieterListe()">
+    </div>
+    <div id="mi-list" style="margin-bottom:16px;max-height:340px;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
+    <div class="section-label" id="mi-form-title">Neuer Eintrag</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:8px">
+      <div class="fg"><label>BKR</label><input type="text" id="mi-bkr" placeholder="z.B. 1600"></div>
+      <div class="fg"><label>WE</label><input type="text" id="mi-we" placeholder="z.B. 33720"></div>
+      <div class="fg"><label>MO</label><input type="text" id="mi-mo" placeholder="z.B. 1"></div>
+    </div>
+    <div class="fg"><label>Ort</label><input type="text" id="mi-ort" placeholder="z.B. Raunheim"></div>
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px">
+      <div class="fg"><label>Straße</label><input type="text" id="mi-strasse" placeholder="z.B. Niddastraße"></div>
+      <div class="fg"><label>Hausnummer</label><input type="text" id="mi-hausnummer" placeholder="z.B. 5"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="fg"><label>Geschoss</label><input type="text" id="mi-geschoss" placeholder="z.B. 1. OG"></div>
+      <div class="fg"><label>Lage</label><input type="text" id="mi-lage" placeholder="z.B. L"></div>
+    </div>
+    <input type="hidden" id="mi-edit-id">
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="cancelMieterEdit()">Abbrechen</button>
+      <button class="btn btn-primary" style="flex:1" onclick="saveMieter()">Speichern</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -553,6 +614,7 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 #4f46e5}
 <script src="https://cdn.jsdelivr.net/npm/pizzip@3.1.7/dist/pizzip.min.js"></script>
 <script src="ln_template.js"></script>
 <script src="ln_template2.js"></script>
+<script src="stamp_asset.js"></script>
 <script>
 // ── Config ─────────────────────────────────────────────────────────────────
 const SB_URL = 'https://dzauqisqkkwsbouduuec.supabase.co';
@@ -560,13 +622,27 @@ const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const sb = supabase.createClient(SB_URL, SB_KEY);
 let _rasCache = [];
 let _kontakteCache = [];
+let _mieterCache = [];   // MDB-Mieterliste (Adresse → BKR/WE/MO), für Einsatzort-Suche
+// Supabase liefert max. 1000 Zeilen pro Request → mieterliste (~2300) seitenweise laden.
+async function loadAllMieter() {
+  const all = [], size = 1000;
+  for (let from = 0; ; from += size) {
+    const { data, error } = await sb.from('mieterliste').select('*').order('id').range(from, from + size - 1);
+    if (error || !data || !data.length) break;
+    all.push(...data);
+    if (data.length < size) break;
+  }
+  return all;
+}
 async function loadCaches() {
-  const [raRes, koRes] = await Promise.all([
+  const [raRes, koRes, mieter] = await Promise.all([
     sb.from('rechnungsadressen').select('*').order('name'),
-    sb.from('kontakte').select('*').order('name')
+    sb.from('kontakte').select('*').order('name'),
+    loadAllMieter()
   ]);
   _rasCache = raRes.data || [];
   _kontakteCache = koRes.data || [];
+  _mieterCache = mieter || [];
 }
 
 // ── Microsoft Graph / MSAL ─────────────────────────────────────────────────
@@ -1063,7 +1139,8 @@ function openBueroDetail(id) {
 
   const fields = [
     {l:'Datum',v:cur.datum},{l:'Pos.',v:cur.pos},
-    {l:'Anschrift',v:cur.anschrift,f:1},{l:'Beschreibung',v:cur.beschreibung,f:1},
+    {l:'Anschrift',v:cur.anschrift,f:1},{l:'Objekt (GWH)',v:objektStr(cur)||null,f:1},
+    {l:'Beschreibung',v:cur.beschreibung,f:1},
     {l:'Auftraggeber',v:cur.auftraggeber,f:1},{l:'Mieter',v:cur.mieter,f:1},
     {l:'Melder',v:cur.melder,f:1},
   ].filter(f=>f.v);
@@ -1305,7 +1382,8 @@ async function openDetail(id) {
 
   const fields = [
     {l:'Datum',v:cur.datum},{l:'Pos.',v:cur.pos ? `#${cur.pos}` : null},
-    {l:'Anschrift',v:cur.anschrift,f:1,extra:navBtn},{l:'Beschreibung',v:cur.beschreibung,f:1},
+    {l:'Anschrift',v:cur.anschrift,f:1,extra:navBtn},{l:'Objekt (GWH)',v:objektStr(cur)||null,f:1},
+    {l:'Beschreibung',v:cur.beschreibung,f:1},
     {l:'Mieter',v:cur.mieter,f:1},{l:'Auftraggeber',v:cur.auftraggeber,f:1},
     {l:'Melder',v:cur.melder,f:1},
   ].filter(f=>f.v);
@@ -1400,6 +1478,114 @@ function mdbAutoFill() {
     if (_mdbAF.mel && melEl.value.trim() === 'MDB') melEl.value = '';
     _mdbAF.ag = false; _mdbAF.mel = false;
   }
+  toggleMdbSection(istMDB);
+}
+
+// ── MDB-Einsatzort-Auswahl (Adress-Suche → Geschoss → Wohnung → BKR/WE/MO) ──
+let _mdbRow = null;                    // aktuell gewählte mieterliste-Zeile (final)
+let _mdbBuilding = null;               // {ort,strasse,hausnummer}
+function toggleMdbSection(show) {
+  const sec = document.getElementById('n-mdb-section');
+  if (!sec) return;
+  sec.style.display = show ? 'block' : 'none';
+  if (!show) resetMdbSelection();
+}
+function resetMdbSelection() {
+  _mdbRow = null; _mdbBuilding = null;
+  const s=document.getElementById('n-mdb-search'); if(s) s.value='';
+  const dd=document.getElementById('n-mdb-dd'); if(dd){ dd.innerHTML=''; dd.classList.remove('open'); }
+  const g=document.getElementById('n-mdb-geschoss');
+  if(g){ g.innerHTML='<option value="">– zuerst Adresse wählen –</option>'; g.disabled=true; }
+  const w=document.getElementById('n-mdb-wohnung');
+  if(w){ w.innerHTML='<option value="">– zuerst Geschoss wählen –</option>'; w.disabled=true; }
+  const r=document.getElementById('n-mdb-result'); if(r) r.textContent='';
+}
+// Geschoss-Sortierung (EG < 1.OG < … < ZG < Staffel < Dach)
+function mdbGeschossRank(g){
+  g=(g||'').toLowerCase().trim();
+  if(g==='eg') return 0;
+  if(g.startsWith('zg eg')) return 0.5;
+  let m=g.match(/^(\d+)\.\s*og/); if(m) return parseInt(m[1],10);
+  let z=g.match(/^zg\s*(\d+)/);   if(z) return parseInt(z[1],10)+0.5;
+  if(g.includes('staffel')) return 90;
+  if(g.includes('dach'))    return 91;
+  return 95;
+}
+function mdbSearch(){
+  const dd=document.getElementById('n-mdb-dd');
+  const q=document.getElementById('n-mdb-search').value.trim().toLowerCase();
+  // eindeutige Gebäude (ort+strasse+hausnummer) aus dem Cache
+  const seen=new Map();
+  for(const r of _mieterCache){
+    const key=(r.ort||'')+'|'+(r.strasse||'')+'|'+(r.hausnummer||'');
+    if(!seen.has(key)) seen.set(key,r);
+  }
+  let buildings=[...seen.values()];
+  if(q){
+    const terms=q.split(/\s+/).filter(Boolean);
+    buildings=buildings.filter(b=>{
+      const hay=((b.strasse||'')+' '+(b.hausnummer||'')+' '+(b.ort||'')).toLowerCase();
+      return terms.every(t=>hay.includes(t));
+    });
+  }
+  buildings.sort((a,b)=> ((a.ort||'')+(a.strasse||'')).localeCompare((b.ort||'')+(b.strasse||''),'de')
+                        || (parseInt(a.hausnummer)||0)-(parseInt(b.hausnummer)||0));
+  const shown=buildings.slice(0,80);
+  if(!shown.length){
+    dd.innerHTML='<div class="mdb-dd-empty">Keine Adresse gefunden.</div>';
+  } else {
+    dd.innerHTML=shown.map(b=>`<div class="mdb-dd-item" onclick="mdbPickBuilding('${escAttr(b.ort)}','${escAttr(b.strasse)}','${escAttr(b.hausnummer)}')">${escAttr(b.strasse)} ${escAttr(b.hausnummer)} <span style="color:#94a3b8">· ${escAttr(b.ort)}</span></div>`).join('')
+      + (buildings.length>shown.length?`<div class="mdb-dd-empty">… ${buildings.length-shown.length} weitere – Suche verfeinern.</div>`:'');
+  }
+  dd.classList.add('open');
+}
+function mdbSearchKeydown(e){
+  if(e.key==='Escape'){ document.getElementById('n-mdb-dd').classList.remove('open'); e.stopPropagation(); }
+}
+function mdbPickBuilding(ort,strasse,hausnummer){
+  _mdbBuilding={ort,strasse,hausnummer}; _mdbRow=null;
+  document.getElementById('n-mdb-search').value=strasse+' '+hausnummer+', '+ort;
+  document.getElementById('n-mdb-dd').classList.remove('open');
+  // Geschosse dieses Gebäudes (eindeutig, sortiert)
+  const rows=_mieterCache.filter(r=>r.ort===ort&&r.strasse===strasse&&r.hausnummer===hausnummer);
+  const gs=[...new Set(rows.map(r=>r.geschoss||''))].sort((a,b)=>mdbGeschossRank(a)-mdbGeschossRank(b)||a.localeCompare(b,'de'));
+  const g=document.getElementById('n-mdb-geschoss');
+  g.innerHTML='<option value="">– Geschoss wählen –</option>'+gs.map(x=>`<option value="${escAttr(x)}">${escAttr(x)}</option>`).join('');
+  g.disabled=false;
+  const w=document.getElementById('n-mdb-wohnung');
+  w.innerHTML='<option value="">– zuerst Geschoss wählen –</option>'; w.disabled=true;
+  document.getElementById('n-mdb-result').textContent='';
+  // Anschrift (falls leer) vorbefüllen – PLZ ist in der Liste nicht enthalten
+  const an=document.getElementById('n-anschrift');
+  if(an && !an.value.trim()) an.value=strasse+' '+hausnummer+'\n'+ort;
+}
+function mdbGeschossChange(){
+  _mdbRow=null;
+  const g=document.getElementById('n-mdb-geschoss').value;
+  const w=document.getElementById('n-mdb-wohnung');
+  document.getElementById('n-mdb-result').textContent='';
+  if(!_mdbBuilding||!g){ w.innerHTML='<option value="">– zuerst Geschoss wählen –</option>'; w.disabled=true; return; }
+  const b=_mdbBuilding;
+  const rows=_mieterCache.filter(r=>r.ort===b.ort&&r.strasse===b.strasse&&r.hausnummer===b.hausnummer&&r.geschoss===g);
+  // Lage-Doppelungen (die 12 Fälle) mit MO unterscheiden
+  const lageCount={}; rows.forEach(r=>{lageCount[r.lage]=(lageCount[r.lage]||0)+1;});
+  w.innerHTML='<option value="">– Wohnung / Lage wählen –</option>'+rows.map(r=>{
+    const lbl='Lage '+(r.lage||'')+(lageCount[r.lage]>1?' · MO '+r.mo:'');
+    return `<option value="${escAttr(String(r.id))}">${escAttr(lbl)}</option>`;
+  }).join('');
+  w.disabled=false;
+}
+// Objektidentifikation als Anzeige-String (oder '' wenn kein MDB-Objekt am Auftrag)
+function objektStr(r, sep){
+  if(!r || !r.bkr) return '';
+  sep = sep || ' · ';
+  return ['BKR '+r.bkr,'WE '+r.we,'MO '+r.mo, r.geschoss, r.lage].join(sep);
+}
+function mdbWohnungChange(){
+  const id=document.getElementById('n-mdb-wohnung').value;
+  const res=document.getElementById('n-mdb-result');
+  _mdbRow=id?_mieterCache.find(r=>String(r.id)===String(id))||null:null;
+  res.textContent=_mdbRow?`✓ BKR ${_mdbRow.bkr} · WE ${_mdbRow.we} · MO ${_mdbRow.mo} · ${_mdbRow.geschoss} · ${_mdbRow.lage}`:'';
 }
 
 function openNew() {
@@ -1407,6 +1593,7 @@ function openNew() {
   document.getElementById('n-datum').value=new Date().toISOString().split('T')[0];
   document.getElementById('n-status').value='Offen';
   _mdbAF = { ag:false, mel:false };
+  toggleMdbSection(false);
   document.getElementById('m-new').classList.add('open');
 }
 
@@ -1426,6 +1613,11 @@ async function saveNew() {
     melder:document.getElementById('n-melder').value.trim()||null,
     status:document.getElementById('n-status').value,
   };
+  // MDB: Objektidentifikation aus der Einsatzort-Auswahl übernehmen
+  if(_mdbRow){
+    row.bkr=_mdbRow.bkr||null; row.we=_mdbRow.we||null; row.mo=_mdbRow.mo||null;
+    row.geschoss=_mdbRow.geschoss||null; row.lage=_mdbRow.lage||null;
+  }
   const {data:ins,error}=await sb.from('auftraege').insert([row]).select();
   if(error){toast('Fehler: '+error.message,'err');return;}
   data.unshift(ins[0]);
@@ -1493,6 +1685,9 @@ document.addEventListener('keydown',e=>{
 // Material-Such-Dropdown schließen, wenn außerhalb geklickt wird
 document.addEventListener('click',e=>{
   if(!e.target.closest('.d-mat-search') && !e.target.closest('.d-mat-dd')) closeAllMatDropdowns();
+  if(!e.target.closest('#n-mdb-search') && !e.target.closest('#n-mdb-dd')){
+    const dd=document.getElementById('n-mdb-dd'); if(dd) dd.classList.remove('open');
+  }
 });
 
 // ── Leistungsnachweis ────────────────────────────────────────────────────────
@@ -1543,6 +1738,7 @@ async function openLeistung(id){
     `<div class="info-item"><div class="lbl">Auftrag</div><div class="val">${lnCur.auftrag||'–'}</div></div>`+
     `<div class="info-item"><div class="lbl">Datum</div><div class="val">${lnCur.datum||'–'}</div></div>`+
     (lnCur.anschrift?`<div class="info-item full"><div class="lbl">Anschrift</div><div class="val">${lnCur.anschrift}</div></div>`:'')+
+    (objektStr(lnCur)?`<div class="info-item full"><div class="lbl">Objekt (GWH)</div><div class="val">${objektStr(lnCur)}</div></div>`:'')+
     (lnCur.auftraggeber?`<div class="info-item full"><div class="lbl">Auftraggeber</div><div class="val">${lnCur.auftraggeber}</div></div>`:'')+
     (lnCur.mieter?`<div class="info-item full"><div class="lbl">Mieter</div><div class="val">${lnCur.mieter}</div></div>`:'')+
     (lnCur.beschreibung?`<div class="info-item full"><div class="lbl">Beschreibung</div><div class="val">${lnCur.beschreibung}</div></div>`:'');
@@ -2067,6 +2263,77 @@ function escXmlW(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+// Setzt den Firmenstempel als eigenen, zentrierten Absatz DIREKT ÜBER die
+// Unterschrift-Controls in der Zelle "Unterschrift Kunde / Bevollmächtigte".
+// Die bestehenden Controls bleiben unangetastet -> gezeichnete Unterschriften
+// erscheinen weiterhin (darunter). Bild als word/media/stempel.png (rIdStamp).
+function insertStampAbove(xml, rels) {
+  const ti = xml.indexOf('w:tag w:val="Unterschrift Mieter"');
+  if (ti === -1) return { xml, rels };
+  const pIdx = Math.max(xml.lastIndexOf('<w:p>', ti), xml.lastIndexOf('<w:p ', ti));
+  if (pIdx === -1) return { xml, rels };
+  const cx = 1800000, cy = Math.round(cx * STAMP_H / STAMP_W);   // Seitenverhältnis erhalten
+  const ns = 'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" ' +
+             'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" ' +
+             'xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" ' +
+             'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+  const para =
+    '<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:drawing>' +
+    '<wp:inline distT="0" distB="0" distL="0" distR="0" ' + ns + '>' +
+    '<wp:extent cx="' + cx + '" cy="' + cy + '"/><wp:effectExtent l="0" t="0" r="0" b="0"/>' +
+    '<wp:docPr id="810" name="Firmenstempel"/>' +
+    '<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>' +
+    '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+    '<pic:pic><pic:nvPicPr><pic:cNvPr id="810" name="Firmenstempel"/><pic:cNvPicPr/></pic:nvPicPr>' +
+    '<pic:blipFill><a:blip r:embed="rIdStamp"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>' +
+    '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + cx + '" cy="' + cy + '"/></a:xfrm>' +
+    '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>' +
+    '</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>';
+  const newRels = rels.replace('</Relationships>',
+    '  <Relationship Id="rIdStamp" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/stempel.png"/>\n</Relationships>');
+  return { xml: xml.substring(0, pIdx) + para + xml.substring(pIdx), rels: newRels };
+}
+
+// Hält in der Unterschriftstabelle die Kopfzeile ("Ort, Datum" / "Unterschrift
+// Kunde / Bevollmächtigte") mit der Wertezeile zusammen -> beide brechen gemeinsam
+// um. Nötig, weil die Tabelle in der Vorlage schwebend ist (Word ignoriert dann
+// keepNext/cantSplit); daher zuerst diese eine Tabelle auf inline umstellen.
+function keepSigRowsTogether(xml) {
+  const mi = xml.indexOf('w:tag w:val="Unterschrift Mieter"');
+  if (mi === -1) return xml;
+  // 1) schwebend -> inline (nur diese Tabelle)
+  const ts = xml.lastIndexOf('<w:tbl>', mi);
+  const te = xml.indexOf('</w:tbl>', mi) + '</w:tbl>'.length;
+  if (ts !== -1 && te !== -1) {
+    const tbl = xml.substring(ts, te).replace(/<w:tblpPr[^>]*\/>/, '');
+    xml = xml.substring(0, ts) + tbl + xml.substring(te);
+  }
+  // 2) Zeilen bestimmen (Zeilenanfang <w:tr>, NICHT <w:trPr>)
+  const opens = []; const reTr = /<w:tr(?![a-zA-Z])/g; let m;
+  while ((m = reTr.exec(xml)) !== null) opens.push(m.index);
+  const rows = opens.map(s => [s, xml.indexOf('</w:tr>', s) + 7]);
+  const ti = xml.indexOf('w:tag w:val="Unterschrift Mieter"');
+  let r1i = -1;
+  for (let i = 0; i < rows.length; i++) { if (rows[i][0] <= ti && ti < rows[i][1]) { r1i = i; break; } }
+  if (r1i <= 0) return xml;
+  const s0 = rows[r1i-1][0], e0 = rows[r1i-1][1], s1 = rows[r1i][0], e1 = rows[r1i][1];
+  let row0 = xml.substring(s0, e0), row1 = xml.substring(s1, e1);
+  // Kopfzeile: keepNext in jeden Absatz (kein pPr vorhanden) + cantSplit auf Zeile
+  if (row0.indexOf('<w:pPr') === -1) {
+    row0 = row0.replace(/(<w:p(?![a-zA-Z])[^>]*>)/g, '$1<w:pPr><w:keepNext/></w:pPr>');
+  }
+  const m0 = row0.match(/^<w:tr(?![a-zA-Z])[^>]*>/);
+  if (m0) row0 = row0.substring(0, m0[0].length) + '<w:trPr><w:cantSplit/></w:trPr>' + row0.substring(m0[0].length);
+  // Wertezeile: cantSplit ins vorhandene trPr (vor trHeight)
+  if (row1.indexOf('<w:trPr>') !== -1) {
+    row1 = row1.replace('<w:trPr>', '<w:trPr><w:cantSplit/>');
+  } else {
+    const m1 = row1.match(/^<w:tr(?![a-zA-Z])[^>]*>/);
+    if (m1) row1 = row1.substring(0, m1[0].length) + '<w:trPr><w:cantSplit/></w:trPr>' + row1.substring(m1[0].length);
+  }
+  return xml.substring(0, s0) + row0 + xml.substring(e0, s1) + row1 + xml.substring(e1);
+}
+
 async function appendPhotosToWord(zip, docXml, relsXml, photoUrls) {
   const maxW = 5760000, maxH = 8208000; // 160mm × 228mm in EMU
   let pageXml = '';
@@ -2199,6 +2466,7 @@ async function genWordLeistungsnachweis(returnBlob = false) {
       'Mieter':                             (cur.mieter||'').split('\n')[0],
       'Anschrift Straße und Hausnummer':    strasseHnr,
       'Anschrift PLZ und Ort':              plzOrt,
+      'Objekt':                             objektStr(cur, ' / '),
       'Auftrag':                            cur.auftrag||'',
       'Beschreibung':                       cur.beschreibung||'',
       'Leistungsdatum':                     fmtD(ez.leistungsdatum),
@@ -2237,6 +2505,20 @@ async function genWordLeistungsnachweis(returnBlob = false) {
     } else {
       docXml = fillContentControl(docXml, 'Unterschrift Mieter', ' ');
     }
+    // Firmenstempel NUR bei Auftraggeber "Pretiumplus / Fraport" und
+    // "Pretiumplus / Kelsterbach" ins Feld "Unterschrift Kunde / Bevollmächtigte".
+    const agStamp = (cur.auftraggeber||'').split('\n')[0].trim().toLowerCase();
+    if (typeof STAMP_PNG_B64 !== 'undefined' &&
+        (agStamp.includes('pretiumplus / fraport') || agStamp.includes('pretiumplus / kelsterbach'))) {
+      const rs = insertStampAbove(docXml, relsXml);
+      docXml = rs.xml; relsXml = rs.rels;
+      zip.file('word/media/stempel.png', Uint8Array.from(atob(STAMP_PNG_B64), c=>c.charCodeAt(0)));
+    }
+    // Kopf- und Wertezeile der Unterschriftstabelle zusammenhalten – für ALLE Auftraggeber.
+    // Bewusst akzeptiert (Nutzer 2026-07-01): Bei Aufträgen MIT Fotos entsteht dadurch eine
+    // leere Seite vor den Fotos (Umstellung schwebend->inline). Dem Nutzer sind die immer
+    // zusammenhängenden Felder wichtiger als die vermiedene Leerseite.
+    docXml = keepSigRowsTogether(docXml);
     if (cur.bilder && cur.bilder.length) {
       const res = await appendPhotosToWord(zip, docXml, relsXml, cur.bilder);
       docXml = res.docXml; relsXml = res.relsXml;
@@ -2399,6 +2681,92 @@ async function saveKontakt() {
   cancelKontaktEdit();
   await renderKontaktList();
   toast('Kontakt gespeichert ✓','ok');
+}
+
+// ── Mieterliste (MDB Objektidentifikation) ───────────────────────────────────
+function openMieterliste() {
+  cancelMieterEdit();
+  document.getElementById('mi-search').value = '';
+  document.getElementById('m-mieterliste').classList.add('open');
+  renderMieterListe();
+}
+function renderMieterListe() {
+  const el = document.getElementById('mi-list');
+  const q = document.getElementById('mi-search').value.trim().toLowerCase();
+  if (!_mieterCache.length) { el.innerHTML = '<div style="color:#94a3b8;font-size:13px;padding:8px 0">Noch keine Einträge geladen.</div>'; return; }
+  let rows = _mieterCache;
+  if (q) {
+    const terms = q.split(/\s+/).filter(Boolean);
+    rows = rows.filter(r => {
+      const hay = ((r.ort||'')+' '+(r.strasse||'')+' '+(r.hausnummer||'')+' '+(r.geschoss||'')+' '+(r.lage||'')+' '+(r.bkr||'')+' '+(r.we||'')+' '+(r.mo||'')).toLowerCase();
+      return terms.every(t => hay.includes(t));
+    });
+  } else {
+    el.innerHTML = `<div style="color:#94a3b8;font-size:13px;padding:8px 0">${_mieterCache.length} Einträge – oben suchen, um zu filtern.</div>`;
+    return;
+  }
+  if (!rows.length) { el.innerHTML = '<div style="color:#94a3b8;font-size:13px;padding:8px 0">Kein Eintrag gefunden.</div>'; return; }
+  const shown = rows.slice(0, 100);
+  el.innerHTML = shown.map(r => `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div style="font-weight:600;font-size:13px">${escAttr(r.strasse||'')} ${escAttr(r.hausnummer||'')} · ${escAttr(r.ort||'')}</div>
+        <div style="font-size:12px;color:#64748b">${escAttr(r.geschoss||'')} · Lage ${escAttr(r.lage||'')}</div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:2px">BKR ${escAttr(r.bkr||'')} · WE ${escAttr(r.we||'')} · MO ${escAttr(r.mo||'')}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0;margin-left:8px">
+        <button class="btn btn-secondary" style="padding:4px 10px;font-size:12px" onclick="editMieter('${escAttr(String(r.id))}')">✏️</button>
+        <button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;color:#ef4444" onclick="deleteMieter('${escAttr(String(r.id))}')">🗑️</button>
+      </div>
+    </div>`).join('') + (rows.length > shown.length ? `<div style="color:#94a3b8;font-size:12px;padding:4px 0">… ${rows.length-shown.length} weitere – Suche verfeinern.</div>` : '');
+}
+function editMieter(id) {
+  const r = _mieterCache.find(x => String(x.id) === String(id));
+  if (!r) return;
+  document.getElementById('mi-edit-id').value = r.id;
+  document.getElementById('mi-bkr').value = r.bkr||'';
+  document.getElementById('mi-we').value = r.we||'';
+  document.getElementById('mi-mo').value = r.mo||'';
+  document.getElementById('mi-ort').value = r.ort||'';
+  document.getElementById('mi-strasse').value = r.strasse||'';
+  document.getElementById('mi-hausnummer').value = r.hausnummer||'';
+  document.getElementById('mi-geschoss').value = r.geschoss||'';
+  document.getElementById('mi-lage').value = r.lage||'';
+  document.getElementById('mi-form-title').textContent = 'Eintrag bearbeiten';
+  document.getElementById('m-mieterliste').scrollTop = document.getElementById('m-mieterliste').scrollHeight;
+}
+async function deleteMieter(id) {
+  if (!confirm('Diesen Eintrag wirklich löschen?')) return;
+  const { error } = await sb.from('mieterliste').delete().eq('id', id);
+  if (error) { toast('Fehler beim Löschen','err'); return; }
+  await loadCaches();
+  renderMieterListe();
+  toast('Eintrag gelöscht ✓','ok');
+}
+function cancelMieterEdit() {
+  ['mi-bkr','mi-we','mi-mo','mi-ort','mi-strasse','mi-hausnummer','mi-geschoss','mi-lage','mi-edit-id'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('mi-form-title').textContent = 'Neuer Eintrag';
+}
+async function saveMieter() {
+  const rec = {
+    bkr: document.getElementById('mi-bkr').value.trim() || null,
+    we:  document.getElementById('mi-we').value.trim() || null,
+    mo:  document.getElementById('mi-mo').value.trim() || null,
+    ort: document.getElementById('mi-ort').value.trim() || null,
+    strasse: document.getElementById('mi-strasse').value.trim() || null,
+    hausnummer: document.getElementById('mi-hausnummer').value.trim() || null,
+    geschoss: document.getElementById('mi-geschoss').value.trim() || null,
+    lage: document.getElementById('mi-lage').value.trim() || null,
+  };
+  if (!rec.ort || !rec.strasse || !rec.hausnummer) { toast('Ort, Straße und Hausnummer sind Pflichtfelder','err'); return; }
+  const editId = document.getElementById('mi-edit-id').value;
+  let error;
+  if (editId) ({ error } = await sb.from('mieterliste').update(rec).eq('id', editId));
+  else        ({ error } = await sb.from('mieterliste').insert(rec));
+  if (error) { toast('Fehler beim Speichern','err'); return; }
+  await loadCaches();
+  cancelMieterEdit();
+  renderMieterListe();
+  toast('Eintrag gespeichert ✓','ok');
 }
 
 // Öffnet einen Entwurf in der DESKTOP-Outlook-App (kein Browser, kein Login).
