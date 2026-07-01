@@ -397,7 +397,7 @@ tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 #4f46e5}
       <div class="modal-title">➕ Neuer Auftrag</div>
       <button class="modal-close" onclick="closeModal('m-new')">✕</button>
     </div>
-    <div class="fg"><label>Auftragsnummer *</label><input type="text" id="n-auftrag" placeholder="z.B. Auftrag 8001220284"></div>
+    <div class="fg"><label>Auftragsnummer *</label><input type="text" id="n-auftrag" oninput="mdbAutoFill()" placeholder="z.B. Auftrag 8001220284"></div>
     <div class="fg"><label>Datum</label><input type="date" id="n-datum"></div>
     <div class="fg"><label>Anschrift</label><textarea id="n-anschrift" placeholder="Straße Nr&#10;PLZ Ort&#10;Etage&#10;Whg: …"></textarea></div>
     <div class="fg"><label>Beschreibung</label><textarea id="n-beschreibung" placeholder="Was ist zu tun?"></textarea></div>
@@ -1381,10 +1381,32 @@ async function saveDetail() {
 }
 
 // ── Neuer Auftrag ──────────────────────────────────────────────────────────
+// MDB-Autovervollständigung: Beginnt die Auftragsnummer mit "MDB", werden
+// Auftraggeber ("GWH") und Melder ("MDB") automatisch vorbelegt – aber NUR wenn
+// das Feld leer ist, damit eine manuelle Eingabe nie überschrieben wird. Wird
+// die Auftragsnummer wieder von MDB weggeändert, werden ausschließlich die
+// selbst gesetzten Werte zurückgenommen (erkennbar daran, dass sie unverändert
+// "GWH"/"MDB" lauten) – vom Nutzer geänderte Werte bleiben unangetastet.
+let _mdbAF = { ag:false, mel:false };
+function mdbAutoFill() {
+  const agEl  = document.getElementById('n-auftraggeber');
+  const melEl = document.getElementById('n-melder');
+  const istMDB = document.getElementById('n-auftrag').value.trim().toUpperCase().startsWith('MDB');
+  if (istMDB) {
+    if (agEl.value.trim()  === '') { agEl.value  = 'GWH'; _mdbAF.ag  = true; }
+    if (melEl.value.trim() === '') { melEl.value = 'MDB'; _mdbAF.mel = true; }
+  } else {
+    if (_mdbAF.ag  && agEl.value.trim()  === 'GWH') agEl.value  = '';
+    if (_mdbAF.mel && melEl.value.trim() === 'MDB') melEl.value = '';
+    _mdbAF.ag = false; _mdbAF.mel = false;
+  }
+}
+
 function openNew() {
   ['n-auftrag','n-anschrift','n-beschreibung','n-auftraggeber','n-mieter','n-melder'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('n-datum').value=new Date().toISOString().split('T')[0];
   document.getElementById('n-status').value='Offen';
+  _mdbAF = { ag:false, mel:false };
   document.getElementById('m-new').classList.add('open');
 }
 
